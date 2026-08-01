@@ -1,0 +1,1299 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d1424">
+<title>SLEEPY 管理コンソール | スタッフ用</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='48' fill='%230d1424'/%3E%3Cpath d='M63 20a34 34 0 1 0 17 44A28 28 0 0 1 63 20z' fill='%2325a08c'/%3E%3C/svg%3E">
+
+<!-- ============================================================
+     睡眠整体サロン SLEEPY 管理コンソール（スタッフ・管理者用）
+     admin.html をブラウザで開くだけで動作（サーバー不要）。
+     顧客データはこの端末の localStorage（sleepy_admin_v1）に保存。
+     ・ダッシュボード（KPI / 要フォロー / 本日の来店）
+     ・顧客一覧・検索 / 顧客カルテ（睡眠・姿勢・来店レポート・購入）
+     ・売上（物販・回数券・サブスク）
+     ・顧客アプリ(index.html)からのデータ取り込み（JSON / 同一端末）
+     ※デモ用PIN: 1234
+     ※実運用ではバックエンド(DB/API)に置き換える前提の管理UIプロトタイプ
+     ============================================================ -->
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700;900&family=Noto+Sans+JP:wght@400;500;700;800&display=swap">
+<script src="vendor/tailwind.js"></script>
+<script src="vendor/react.production.min.js"></script>
+<script src="vendor/react-dom.production.min.js"></script>
+<script src="vendor/babel.min.js"></script>
+
+<script>
+tailwind.config = {
+  theme: { extend: {
+    colors: {
+      night: { 950:'#090e1c', 900:'#0d1424', 800:'#131c31', 700:'#1a2440', 600:'#222e4c', 500:'#2b3a5e', 400:'#3c4c74', 300:'#5b6b94', 200:'#8b96b8', 100:'#c7cede', 50:'#eef1f8' },
+      cream: { 50:'#fdfaf2', 100:'#faf3e3', 200:'#f3e7c9' },
+      moon: { 300:'#f9e6a8', 400:'#f6d97e', 500:'#eec25a' },
+      cgold:'#bd861a', cperi:'#6d82ec', csymp:'#df5346', cpara:'#25a08c',
+    },
+    fontFamily: { maru: ['"Zen Maru Gothic"','"Noto Sans JP"','sans-serif'], sans: ['"Noto Sans JP"','sans-serif'] },
+  } },
+};
+</script>
+<style>
+  * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+  body { font-family: "Zen Maru Gothic","Noto Sans JP",sans-serif; margin:0; background:#0d1424; color:#eef1f8; }
+  ::-webkit-scrollbar { width:8px; height:8px; }
+  ::-webkit-scrollbar-thumb { background:#2b3a5e; border-radius:8px; }
+  input, select, textarea, button { font-family: inherit; }
+  @keyframes pop-in { 0% { opacity:0; transform:scale(.6);} 70% { transform:scale(1.06);} 100% { opacity:1; transform:scale(1);} }
+  @keyframes slide-up { 0% { opacity:0; transform:translateY(14px);} 100% { opacity:1; transform:translateY(0);} }
+  @keyframes floaty { 0%,100% { transform:translateY(0);} 50% { transform:translateY(-6px);} }
+  .anim-pop { animation: pop-in .3s cubic-bezier(.2,1.4,.4,1) both; }
+  .anim-slide-up { animation: slide-up .35s ease both; }
+  .anim-floaty { animation: floaty 3.4s ease-in-out infinite; }
+  .card { background:#222e4c; border:1px solid rgba(199,206,222,.08); border-radius:16px; }
+  .card-deep { background:#1a2440; border:1px solid rgba(199,206,222,.07); border-radius:16px; }
+  .btn-press { transition: transform .12s ease; }
+  .btn-press:active { transform: scale(.96); }
+  #toast-root { position:fixed; top:14px; left:50%; transform:translateX(-50%); z-index:9999; display:flex; flex-direction:column; gap:8px; pointer-events:none; width:min(92vw,420px); }
+  .toast { pointer-events:auto; padding:11px 16px; border-radius:14px; color:#0d1424; font-size:13px; font-weight:700; box-shadow:0 10px 30px rgba(0,0,0,.45); animation:pop-in .3s cubic-bezier(.2,1.4,.4,1); background:#faf3e3; }
+  .toast-err { background:#f5b0a0; }
+  .viz-tip { position:absolute; z-index:20; background:#0d1424; border:1px solid rgba(199,206,222,.18); color:#eef1f8; font-size:11px; font-weight:700; padding:6px 10px; border-radius:10px; pointer-events:none; white-space:nowrap; transform:translate(-50%,-110%); }
+  .viz-tip .tip-sub { color:#8b96b8; font-weight:500; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<div id="toast-root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef, useMemo, useCallback, createContext, useContext } = React;
+
+/* ============================================================
+   共通ユーティリティ（顧客アプリ index.html と同一ロジック）
+   ============================================================ */
+const C = {
+  night900:'#0d1424', night700:'#1a2440', night600:'#222e4c', night500:'#2b3a5e', night400:'#3c4c74',
+  night300:'#5b6b94', night200:'#8b96b8', night100:'#c7cede', night50:'#eef1f8',
+  cream:'#faf3e3', moon:'#f6d97e',
+  wool:'#faf3e3', woolShade:'#efe3c8', choco:'#7a5236', chocoDark:'#5f3f28', hoof:'#c69a6d', hoofDark:'#b98a5c',
+  face:'#f8dfbe', cheek:'#f5b0a0',
+  gold:'#bd861a', peri:'#6d82ec', symp:'#df5346', para:'#25a08c',
+  grid:'#2c3554', axis:'#3c4c74', muted:'#8b96b8',
+  good:'#0ca30c', warning:'#fab219', serious:'#ec835a', critical:'#d03b3b',
+};
+const pad2 = (n) => String(n).padStart(2, '0');
+const toDateStr = (d) => `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+const todayStr = () => toDateStr(new Date());
+const addDays = (dateStr, n) => { const d = new Date(dateStr + 'T12:00:00'); d.setDate(d.getDate()+n); return toDateStr(d); };
+const WD = ['日','月','火','水','木','金','土'];
+const fmtMD = (s) => { const d = new Date(s+'T12:00:00'); return `${d.getMonth()+1}/${d.getDate()}`; };
+const fmtMDW = (s) => { const d = new Date(s+'T12:00:00'); return `${d.getMonth()+1}/${d.getDate()}(${WD[d.getDay()]})`; };
+const fmtJP = (s) => { const d = new Date(s+'T12:00:00'); return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日(${WD[d.getDay()]})`; };
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const yen = (n) => '¥' + n.toLocaleString('ja-JP');
+const avg = (arr) => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0;
+const daysBetween = (a, b) => Math.round((new Date(b) - new Date(a)) / 86400000);
+
+function sleepHours(bed, wake) {
+  if (!bed || !wake) return 0;
+  const [bh, bm] = bed.split(':').map(Number);
+  const [wh, wm] = wake.split(':').map(Number);
+  let mins = (wh*60+wm) - (bh*60+bm);
+  if (mins <= 0) mins += 24*60;
+  return Math.round(mins/6)/10;
+}
+function toast(msg, type) {
+  const root = document.getElementById('toast-root');
+  const el = document.createElement('div');
+  el.className = 'toast' + (type === 'err' ? ' toast-err' : '');
+  el.textContent = msg;
+  root.appendChild(el);
+  setTimeout(() => { el.style.transition='opacity .3s'; el.style.opacity='0'; setTimeout(()=>el.remove(), 320); }, 2600);
+}
+
+// 行動チェック（スコア計算・表示ラベル用の要約版）
+const HABITS = [
+  { id:'sun', label:'朝の光', icon:'☀️', good:true, score:+3, symp:0, para:12 },
+  { id:'exercise', label:'日中の運動', icon:'🚶', good:true, score:+3, symp:0, para:10 },
+  { id:'bath', label:'湯船', icon:'🛁', good:true, score:+4, symp:0, para:15 },
+  { id:'caffeine', label:'午後カフェイン', icon:'☕', good:false, score:-4, symp:14, para:0 },
+  { id:'phone', label:'寝る前スマホ', icon:'📱', good:false, score:-4, symp:14, para:0 },
+  { id:'alcohol', label:'寝酒', icon:'🍺', good:false, score:-4, symp:10, para:0 },
+  { id:'lateMeal', label:'遅い食事', icon:'🍜', good:false, score:-3, symp:8, para:0 },
+  { id:'longNap', label:'長い昼寝', icon:'💤', good:false, score:-2, symp:5, para:0 },
+];
+const HABIT = Object.fromEntries(HABITS.map(h => [h.id, h]));
+
+function calcSleepScore(log) {
+  const h = sleepHours(log.bed, log.wake);
+  let dur;
+  if (h >= 7 && h <= 8.5) dur = 40;
+  else if ((h >= 6.5 && h < 7) || (h > 8.5 && h <= 9)) dur = 33;
+  else if ((h >= 6 && h < 6.5) || (h > 9 && h <= 9.5)) dur = 25;
+  else if (h >= 5 && h < 6) dur = 15;
+  else dur = 6;
+  const quality = Math.round((log.quality - 1) / 4 * 25);
+  const awake = Math.max(0, 12 - 4 * (log.awakenings || 0));
+  const feel = { 1:2, 2:7, 3:13 }[log.feel] || 7;
+  let habit = 0;
+  (log.habits || []).forEach(id => { const hh = HABIT[id]; if (hh) habit += hh.score; });
+  return clamp(dur + quality + awake + feel + clamp(habit, -10, 10), 0, 100);
+}
+function calcAutonomic(log) {
+  let symp = 0, para = 0;
+  (log.habits || []).forEach(id => { const h = HABIT[id]; if (h) { symp += h.symp; para += h.para; } });
+  const hours = sleepHours(log.bed, log.wake);
+  if (hours < 6) symp += 15; else if (hours >= 7) para += 8;
+  if (log.quality <= 2) symp += 12; else if (log.quality >= 4) para += 10;
+  if ((log.awakenings || 0) >= 2) symp += 10;
+  if (log.feel === 3) para += 8; else if (log.feel === 1) symp += 8;
+  return clamp(Math.round(para - symp), -100, 100);
+}
+function autonomicLabel(v) {
+  if (v <= -40) return { short:'おつかれモード', label:'交感神経がかなり優位' };
+  if (v <= -15) return { short:'がんばりモード', label:'交感神経がやや優位' };
+  if (v < 15)  return { short:'ふつうモード', label:'バランスほぼ中間' };
+  if (v < 40)  return { short:'リラックスモード', label:'副交感神経がやや優位' };
+  return { short:'ぐっすりモード', label:'副交感神経がしっかり優位' };
+}
+function scoreLabel(s) {
+  if (s >= 85) return { label:'ぐっすり', color:C.para };
+  if (s >= 70) return { label:'よいねむり', color:C.para };
+  if (s >= 50) return { label:'まずまず', color:C.warning };
+  return { label:'おつかれぎみ', color:C.serious };
+}
+function levelFromXp(xp) {
+  let lv = 1, rest = xp;
+  while (lv < 30) { const need = 60 + (lv - 1) * 30; if (rest < need) return { lv, cur: rest, need }; rest -= need; lv++; }
+  return { lv: 30, cur: 0, need: 1 };
+}
+const STAGES = [
+  { min:1, title:'ねむりのたまご' }, { min:3, title:'すやすや見習い' }, { min:6, title:'おひるねの達人' },
+  { min:10, title:'ねむりの案内人' }, { min:15, title:'快眠マイスター' }, { min:20, title:'ねむりの守り神' },
+];
+const stageTitle = (lv) => [...STAGES].reverse().find(s => lv >= s.min).title;
+
+// 商品・プラン・ストレッチの表示名（顧客データ参照用の要約マスタ）
+const PRODUCT = {
+  p_pillow:{ emoji:'🛏️', name:'SLEEPY オリジナル快眠まくら', price:12800 },
+  p_bath:{ emoji:'🛁', name:'重炭酸 入浴タブレット 30錠', price:2480 },
+  p_tea:{ emoji:'🍵', name:'おやすみハーブティー 30包', price:1780 },
+  p_glasses:{ emoji:'👓', name:'ブルーライトカットメガネ', price:4980 },
+  p_pole:{ emoji:'🧘', name:'ストレッチポール', price:8800 },
+  p_mask:{ emoji:'🎭', name:'シルクアイマスク', price:2980 },
+  p_spray:{ emoji:'🌿', name:'ラベンダー ピロースプレー', price:1980 },
+  p_gaba:{ emoji:'💊', name:'GABA配合 おやすみサプリ 30日分', price:3980 },
+  t_5:{ emoji:'🎫', name:'施術回数券（5回）', price:27500, ticket:{ count:5, months:6 } },
+  t_10:{ emoji:'🎫', name:'施術回数券（10回）', price:52000, ticket:{ count:10, months:12 } },
+};
+const SUB_PLAN = {
+  sub_light:{ emoji:'🌙', name:'整えライト会員', price:10800, cadence:'月1回', color:'#6d82ec' },
+  sub_std:{ emoji:'✨', name:'整えスタンダード会員', price:19800, cadence:'月2回', color:'#eec25a' },
+  sub_care:{ emoji:'📦', name:'おうちケア定期便', price:2980, cadence:'毎月', color:'#25a08c' },
+};
+const STRETCH = {
+  s_neck_side:{ emoji:'🦒', name:'首のよこ倒しストレッチ' }, s_chest:{ emoji:'🫁', name:'胸ひらきストレッチ' },
+  s_scapula:{ emoji:'🦋', name:'肩甲骨はがし体操' }, s_waist:{ emoji:'🌀', name:'寝たまま腰ひねり' },
+  s_hip:{ emoji:'🍑', name:'おしり伸ばしストレッチ' }, s_478:{ emoji:'🌬️', name:'4-7-8 リラックス呼吸法' },
+  s_calf:{ emoji:'🦵', name:'ふくらはぎポンプ体操' }, s_morning:{ emoji:'🌻', name:'朝のせのびリセット体操' },
+};
+const ASSESS_CATS = [
+  { id:'sleep', name:'ねむりの状態', emoji:'🌙' }, { id:'rhythm', name:'生活リズム', emoji:'⏰' },
+  { id:'stress', name:'こころ', emoji:'💭' }, { id:'body', name:'からだ', emoji:'💪' }, { id:'env', name:'環境・習慣', emoji:'🛏️' },
+];
+
+/* ============================================================
+   スーピーくん（管理画面用コンパクト版）
+   ============================================================ */
+const WOOL_HEAD = [ [130,62,33],[99,70,26],[161,70,26],[81,90,21],[179,90,21],[87,112,16],[173,112,16],[130,52,24] ];
+const WOOL_BANG = [ [105,82,17],[130,76,19],[155,82,17] ];
+const WOOL_BODY = [ [130,178,56],[88,164,31],[172,164,31],[76,192,25],[184,192,25],[130,198,46],[104,150,26],[156,150,26] ];
+function WoolCircles({ list, fill, extra = 0 }) {
+  return <g>{list.map(([x,y,r],i) => <circle key={i} cx={x} cy={y} r={r+extra} fill={fill} />)}</g>;
+}
+function Soupy({ size = 60, mood = 'happy', animate = false, className = '' }) {
+  return (
+    <div className={`relative inline-block select-none ${animate ? 'anim-floaty' : ''} ${className}`} style={{ width:size, height:size*(270/260) }}>
+      <svg viewBox="0 0 260 270" width="100%" height="100%" style={{ display:'block' }}>
+        <defs>
+          <radialGradient id="adWool" gradientUnits="userSpaceOnUse" cx="104" cy="62" r="205">
+            <stop offset="0%" stopColor="#fffdf6" /><stop offset="52%" stopColor="#faf3e3" /><stop offset="100%" stopColor="#e6d9ba" />
+          </radialGradient>
+          <radialGradient id="adFace" gradientUnits="userSpaceOnUse" cx="118" cy="96" r="86">
+            <stop offset="0%" stopColor="#fbe9cd" /><stop offset="100%" stopColor="#efd0a4" />
+          </radialGradient>
+          <linearGradient id="adBk" x1="0" y1="0" x2="0.25" y2="1">
+            <stop offset="0%" stopColor="#33436f" /><stop offset="55%" stopColor="#222e4c" /><stop offset="100%" stopColor="#18203a" />
+          </linearGradient>
+          <linearGradient id="adMoon" x1="0" y1="0" x2="0.6" y2="1">
+            <stop offset="0%" stopColor="#f9e6a8" /><stop offset="60%" stopColor="#eec25a" /><stop offset="100%" stopColor="#d9a53e" />
+          </linearGradient>
+        </defs>
+        <g>
+          <WoolCircles list={WOOL_BODY} fill={C.choco} extra={5} />
+          <WoolCircles list={WOOL_HEAD} fill={C.choco} extra={5} />
+          <ellipse cx={76} cy={112} rx={24} ry={14} fill={C.choco} transform="rotate(14 76 112)" />
+          <ellipse cx={184} cy={112} rx={24} ry={14} fill={C.choco} transform="rotate(-14 184 112)" />
+          <WoolCircles list={WOOL_BANG} fill={C.choco} extra={4.5} />
+        </g>
+        <WoolCircles list={WOOL_BODY} fill="url(#adWool)" />
+        <path d="M86 152 Q130 166 174 152 Q198 170 194 202 Q188 234 130 238 Q72 234 66 202 Q62 170 86 152 Z" fill="url(#adBk)" stroke="#10192e" strokeWidth={4} />
+        <path d="M86 152 Q130 166 174 152" fill="none" stroke="#d9b45c" strokeWidth={3.5} strokeLinecap="round" />
+        <path d="M138 184 a13 13 0 1 0 7 17 a10 10 0 1 1 -7 -17 Z" fill="url(#adMoon)" transform="rotate(-14 138 194)" />
+        <ellipse cx={106} cy={151} rx={16} ry={10.5} fill={C.hoof} stroke={C.choco} strokeWidth={4.5} transform="rotate(20 106 151)" />
+        <ellipse cx={154} cy={151} rx={16} ry={10.5} fill={C.hoof} stroke={C.choco} strokeWidth={4.5} transform="rotate(-20 154 151)" />
+        <ellipse cx={130} cy={112} rx={32} ry={28} fill="url(#adFace)" />
+        <g>{WOOL_BANG.map(([x,y,r],i) => <circle key={i} cx={x} cy={y} r={r} fill="url(#adWool)" stroke={C.choco} strokeWidth={4} />)}</g>
+        <WoolCircles list={WOOL_HEAD} fill="url(#adWool)" />
+        <g transform="rotate(18 76 112)"><ellipse cx={76} cy={118} rx={19} ry={10} fill="url(#adFace)" stroke={C.choco} strokeWidth={4} /></g>
+        <g transform="rotate(-18 184 112)"><ellipse cx={184} cy={118} rx={19} ry={10} fill="url(#adFace)" stroke={C.choco} strokeWidth={4} /></g>
+        {mood === 'happy'
+          ? <g><circle cx={110} cy={117} r={5.2} fill={C.chocoDark} /><circle cx={150} cy={117} r={5.2} fill={C.chocoDark} /><circle cx={112} cy={115} r={1.9} fill="#fff" /><circle cx={152} cy={115} r={1.9} fill="#fff" /></g>
+          : <g fill="none" stroke={C.chocoDark} strokeWidth={4} strokeLinecap="round"><path d="M101 116 q9 7 18 0" /><path d="M141 116 q9 7 18 0" /></g>}
+        <ellipse cx={99} cy={127} rx={8.5} ry={5.8} fill={C.cheek} opacity={.85} />
+        <ellipse cx={161} cy={127} rx={8.5} ry={5.8} fill={C.cheek} opacity={.85} />
+        <ellipse cx={130} cy={124} rx={3.4} ry={2.5} fill={C.chocoDark} />
+        <path d="M123 130 q7 5.5 14 0" stroke={C.chocoDark} strokeWidth={3.2} strokeLinecap="round" fill="none" />
+      </svg>
+    </div>
+  );
+}
+
+/* ============================================================
+   デモ顧客データ生成・ストア
+   ============================================================ */
+const ADMIN_KEY = 'sleepy_admin_v1';
+
+function makeLogs(days, fn) {
+  const logs = {};
+  const today = todayStr();
+  for (let i = days; i >= 1; i--) {
+    const spec = fn(days - i, i); // (経過index, 何日前)
+    if (!spec) continue;
+    const log = { bed: spec[0], wake: spec[1], quality: spec[2], awakenings: spec[3], feel: spec[4], habits: spec[5] || [] };
+    log.score = calcSleepScore(log);
+    log.balance = calcAutonomic(log);
+    logs[addDays(today, -i)] = log;
+  }
+  return logs;
+}
+
+function mkTicket(name, total, used, purchasedDaysAgo, months, usedDaysAgos = []) {
+  const p = addDays(todayStr(), -purchasedDaysAgo);
+  return { id: uid(), name, total, used, purchasedAt: p, expiresAt: addDays(p, Math.round(months * 30.4)),
+    history: usedDaysAgos.map(d => ({ date: addDays(todayStr(), -d), note: '睡眠整体 60分' })) };
+}
+
+function mkCustomer(o) {
+  return {
+    id: uid(), kana: o.kana || '', phone: o.phone || '', adminMemo: o.memo || '', importedAt: null,
+    data: {
+      version: 1, onboarded: true,
+      profile: { name: o.name, goal: o.goal || 'fallAsleep', createdAt: addDays(todayStr(), -(o.since || 60)), memberNo: o.memberNo },
+      soupy: { xp: o.xp || 0, wearing: [], petDate: '', petCount: 0 },
+      sleepLogs: o.logs || {},
+      visits: (o.visits || []).map(v => ({ id: uid(), date: addDays(todayStr(), -v.d), menu: v.menu || '睡眠整体 60分', note: v.note || '', karte: v.karte || null })),
+      tickets: o.tickets || [],
+      posture: (o.posture || []).map(p => ({ id: uid(), date: addDays(todayStr(), -p.d), mode: p.mode, phase: p.phase, score: p.score, metrics: p.metrics, img: null, pairId: p.pairId, demo: true })),
+      stretchLog: (o.stretch || []).map(s => ({ date: addDays(todayStr(), -s.d), stretchId: s.id })),
+      learnRead: o.learnRead || [], quizDone: {},
+      orders: (o.orders || []).map(x => ({ id: uid(), date: addDays(todayStr(), -x.d), items: x.items, delivery: 'store',
+        total: x.items.reduce((a, it) => a + (PRODUCT[it.id]?.price || 0) * it.qty, 0) })),
+      cart: [], visitFlow: null, xpLog: [],
+      quickChecks: o.quick ? [{ id: uid(), date: addDays(todayStr(), -o.quick.d), score: o.quick.score, label: o.quick.label, emoji: o.quick.emoji || '💭', text: '' }] : [],
+      assessments: o.assess ? [{ id: uid(), date: addDays(todayStr(), -o.assess.d), total: o.assess.total, cats: o.assess.cats, worst: o.assess.worst, bestId: o.assess.best, level: o.assess.level }] : [],
+      slidesDone: [], subscription: o.sub ? { planId: o.sub, since: addDays(todayStr(), -(o.subSince || 30)) } : null,
+      prescription: o.presc ? { items: o.presc.items, date: addDays(todayStr(), -o.presc.d), until: addDays(todayStr(), 14 - o.presc.d) } : null,
+    },
+  };
+}
+
+function seedAdmin() {
+  const customers = [
+    mkCustomer({ name:'田中 ゆかり', kana:'たなか ゆかり', phone:'090-1111-2222', memberNo:'SL-1024', goal:'fallAsleep', since:70, xp:640,
+      memo:'首肩の緊張つよめ。施術後の姿勢改善が顕著。ハーブティー気に入ってくれている。',
+      logs: makeLogs(21, (n, i) => {
+        const good = n > 10;
+        const bed = good ? '23:20' : '23:50', wake = '06:30';
+        const q = good ? (n % 3 === 0 ? 5 : 4) : 3, aw = good ? 0 : 1, feel = good ? 3 : 2;
+        const hb = good ? ['sun','bath', n % 2 ? 'exercise' : ''] : ['phone', n % 3 ? '' : 'caffeine'];
+        return [bed, wake, q, aw, feel, hb.filter(Boolean)];
+      }),
+      visits: [{ d:42 }, { d:28 }, { d:14, note:'寝つき改善の実感あり' }, { d:2, note:'肩の左右差ほぼ解消',
+        karte: { date: addDays(todayStr(), -2), before:{score:66,mode:'side'}, after:{score:88,mode:'side'},
+          feelBefore:{light:4,neck:4,mood:5}, feelAfter:{light:8,neck:8,mood:8},
+          assessTotal:72, prescribed:['s_neck_side','s_478'],
+          comments:['姿勢スコアが 66点 → 88点（+22）に改善。','体感でも「からだの軽さ」「首・肩」が大幅アップ。','この7日間の平均睡眠スコアは78点。'] } }],
+      tickets: [mkTicket('施術回数券（10回）', 10, 4, 42, 12, [42, 28, 14, 2])],
+      posture: [
+        { d:14, mode:'side', phase:'before', score:62, metrics:{ fha:17.8, trunkLean:5.9, kneeLean:3.0 }, pairId:'p1' },
+        { d:14, mode:'side', phase:'after', score:82, metrics:{ fha:9.6, trunkLean:3.0, kneeLean:1.8 }, pairId:'p1' },
+        { d:2, mode:'side', phase:'before', score:66, metrics:{ fha:15.2, trunkLean:5.1, kneeLean:2.6 }, pairId:'p2' },
+        { d:2, mode:'side', phase:'after', score:88, metrics:{ fha:7.4, trunkLean:2.2, kneeLean:1.3 }, pairId:'p2' },
+      ],
+      orders: [{ d:14, items:[{ id:'p_tea', qty:1 }] }, { d:2, items:[{ id:'p_pillow', qty:1 }] }],
+      sub:'sub_std', subSince:42, presc:{ d:2, items:['s_neck_side','s_478'] },
+      stretch: [{ d:1, id:'s_478' }, { d:1, id:'s_neck_side' }, { d:2, id:'s_478' }],
+      quick:{ d:70, score:48, label:'おやすみスイッチ型' },
+      assess:{ d:42, total:72, cats:{ sleep:68, rhythm:75, stress:62, body:70, env:85 }, worst:['stress','sleep'], best:'env', level:{ rank:'B', label:'おおむね良好・のびしろあり' } } }),
+
+    mkCustomer({ name:'佐藤 健二', kana:'さとう けんじ', phone:'080-3333-4444', memberNo:'SL-1031', goal:'wakeMid', since:55, xp:280,
+      memo:'IT職・夜型。カフェイン量多い。回数券残1回 → 次回来店時に更新提案。',
+      logs: makeLogs(14, (n, i) => {
+        const bad = n % 2 === 0;
+        return [bad ? '00:40' : '23:55', '06:50', bad ? 2 : 3, bad ? 2 : 1, bad ? 1 : 2,
+          bad ? ['phone','caffeine'] : ['caffeine', n % 3 ? '' : 'alcohol'].filter(Boolean)];
+      }),
+      visits: [{ d:35 }, { d:18 }, { d:6, note:'中途覚醒2→1回に減少傾向' }],
+      tickets: [mkTicket('施術回数券（5回）', 5, 4, 55, 6, [35, 18, 6])],
+      posture: [
+        { d:6, mode:'side', phase:'before', score:58, metrics:{ fha:19.5, trunkLean:6.8, kneeLean:3.4 }, pairId:'p3' },
+        { d:6, mode:'side', phase:'after', score:76, metrics:{ fha:11.2, trunkLean:3.9, kneeLean:2.1 }, pairId:'p3' },
+      ],
+      orders: [{ d:18, items:[{ id:'p_glasses', qty:1 }] }],
+      presc:{ d:6, items:['s_478','p_tea'] },
+      quick:{ d:55, score:38, label:'リズム乱れ型' },
+      assess:{ d:35, total:58, cats:{ sleep:52, rhythm:48, stress:60, body:64, env:66 }, worst:['rhythm','sleep'], best:'env', level:{ rank:'C', label:'お疲れサインが出ています' } } }),
+
+    mkCustomer({ name:'鈴木 まなみ', kana:'すずき まなみ', phone:'070-5555-6666', memberNo:'SL-1048', goal:'morning', since:3, xp:80,
+      memo:'新規。朝スッキリ起きたい。まずは記録習慣の定着から。',
+      logs: makeLogs(3, () => ['23:45', '06:40', 3, 1, 2, ['phone']]),
+      visits: [{ d:1, note:'初回カウンセリング。緊張つよめ、呼吸浅い。' }],
+      tickets: [mkTicket('施術回数券（5回）', 5, 1, 1, 6, [1])],
+      quick:{ d:2, score:52, label:'おやすみスイッチ型' } }),
+
+    mkCustomer({ name:'高橋 大輔', kana:'たかはし だいすけ', phone:'090-7777-8888', memberNo:'SL-0988', goal:'posture', since:120, xp:410,
+      memo:'⚠️ 前回来店から4週間・記録も停止。LINEフォロー済み(返信待ち)。',
+      logs: makeLogs(28, (n, i) => i > 10 ? ['23:40', '06:20', 3, 1, 2, ['exercise']] : null),
+      visits: [{ d:60 }, { d:42 }, { d:28 }],
+      tickets: [mkTicket('施術回数券（10回）', 10, 7, 100, 12, [60, 42, 28])],
+      posture: [
+        { d:28, mode:'front', phase:'normal', score:61, metrics:{ headTilt:2.8, shoulderTilt:4.1, pelvisTilt:3.0, centerShift:11 } },
+      ],
+      assess:{ d:100, total:64, cats:{ sleep:66, rhythm:70, stress:55, body:52, env:78 }, worst:['body','stress'], best:'env', level:{ rank:'C', label:'お疲れサインが出ています' } } }),
+
+    mkCustomer({ name:'伊藤 さくら', kana:'いとう さくら', phone:'080-9999-0000', memberNo:'SL-1002', goal:'fallAsleep', since:90, xp:980,
+      memo:'優等生さん。定期便利用中。ご友人紹介1件(鈴木さま)。',
+      logs: makeLogs(21, (n) => ['23:10', '06:30', n % 4 === 0 ? 4 : 5, 0, 3, ['sun','bath','exercise']]),
+      visits: [{ d:50 }, { d:30 }, { d:10, note:'状態よし。維持フェーズ。' }],
+      tickets: [mkTicket('施術回数券（10回）', 10, 8, 88, 12, [50, 30, 10])],
+      orders: [{ d:30, items:[{ id:'p_bath', qty:2 }] }, { d:10, items:[{ id:'p_spray', qty:1 }, { id:'p_tea', qty:1 }] }],
+      sub:'sub_care', subSince:60,
+      stretch: [{ d:1, id:'s_morning' }, { d:2, id:'s_morning' }, { d:3, id:'s_morning' }],
+      assess:{ d:50, total:84, cats:{ sleep:88, rhythm:86, stress:78, body:80, env:88 }, worst:[], best:'sleep', level:{ rank:'A', label:'とてもよく整っています' } } }),
+
+    mkCustomer({ name:'渡辺 剛', kana:'わたなべ つよし', phone:'090-1212-3434', memberNo:'SL-1015', goal:'wakeMid', since:45, xp:350,
+      memo:'晩酌の習慣。寝酒→ハーブティー置き換えチャレンジ中(2週目)。',
+      logs: makeLogs(14, (n) => {
+        const drink = n < 7 ? n % 2 === 0 : n % 4 === 0; // 後半は減酒
+        return ['23:30', '06:10', drink ? 2 : 3, drink ? 3 : 1, drink ? 1 : 2, drink ? ['alcohol','lateMeal'] : ['bath']];
+      }),
+      visits: [{ d:20 }, { d:8 }],
+      tickets: [mkTicket('施術回数券（5回）', 5, 2, 45, 6, [20, 8])],
+      orders: [{ d:8, items:[{ id:'p_tea', qty:2 }] }],
+      presc:{ d:8, items:['s_478','s_waist'] },
+      assess:{ d:20, total:61, cats:{ sleep:55, rhythm:66, stress:64, body:62, env:58 }, worst:['sleep','env'], best:'rhythm', level:{ rank:'C', label:'お疲れサインが出ています' } } }),
+
+    mkCustomer({ name:'小林 芽依', kana:'こばやし めい', phone:'080-5656-7878', memberNo:'SL-1039', goal:'posture', since:30, xp:260,
+      memo:'デスクワーク・肩こり主訴。ストレッチ実施率が高い、素直に続くタイプ。',
+      logs: makeLogs(12, (n) => ['24:00'.replace('24:00','00:00'), '07:00', 3, 1, 2, n % 2 ? ['phone'] : ['exercise']]),
+      visits: [{ d:21 }, { d:7, note:'肩の可動域アップ。' }],
+      tickets: [mkTicket('施術回数券（5回）', 5, 2, 30, 6, [21, 7])],
+      posture: [
+        { d:21, mode:'front', phase:'before', score:57, metrics:{ headTilt:3.1, shoulderTilt:4.6, pelvisTilt:3.2, centerShift:12 }, pairId:'p4' },
+        { d:21, mode:'front', phase:'after', score:74, metrics:{ headTilt:1.8, shoulderTilt:2.4, pelvisTilt:2.0, centerShift:7 }, pairId:'p4' },
+        { d:7, mode:'front', phase:'before', score:63, metrics:{ headTilt:2.6, shoulderTilt:3.8, pelvisTilt:2.7, centerShift:9 }, pairId:'p5' },
+        { d:7, mode:'front', phase:'after', score:81, metrics:{ headTilt:1.2, shoulderTilt:1.9, pelvisTilt:1.6, centerShift:5 }, pairId:'p5' },
+      ],
+      stretch: [{ d:1, id:'s_scapula' }, { d:2, id:'s_scapula' }, { d:2, id:'s_chest' }, { d:3, id:'s_scapula' }],
+      presc:{ d:7, items:['s_scapula','s_chest','p_pole'] } }),
+
+    mkCustomer({ name:'山本 のりこ', kana:'やまもと のりこ', phone:'070-2323-4545', memberNo:'SL-0975', goal:'fallAsleep', since:150, xp:520,
+      memo:'回数券を使い切り。満足度は高い→10回券 or スタンダード会員をご案内したい。',
+      logs: makeLogs(10, (n) => ['23:25', '06:45', 4, 1, 2, ['bath', n % 2 ? 'sun' : '']].map((v, i) => i === 5 ? v.filter(Boolean) : v)),
+      visits: [{ d:70 }, { d:45 }, { d:25 }, { d:12 }],
+      tickets: [mkTicket('施術回数券（10回）', 10, 10, 140, 12, [70, 45, 25, 12])],
+      orders: [{ d:45, items:[{ id:'p_mask', qty:1 }] }],
+      assess:{ d:70, total:70, cats:{ sleep:72, rhythm:74, stress:60, body:68, env:76 }, worst:['stress'], best:'env', level:{ rank:'B', label:'おおむね良好・のびしろあり' } } }),
+  ];
+  return { version: 1, pin: '1234', customers, createdAt: todayStr() };
+}
+
+function loadAdmin() {
+  try {
+    const raw = localStorage.getItem(ADMIN_KEY);
+    if (raw) { const st = JSON.parse(raw); if (st && st.version === 1) return st; }
+  } catch (e) { console.warn(e); }
+  const st = seedAdmin();
+  try { localStorage.setItem(ADMIN_KEY, JSON.stringify(st)); } catch (e) {}
+  return st;
+}
+function saveAdmin(st) { try { localStorage.setItem(ADMIN_KEY, JSON.stringify(st)); } catch (e) { console.warn(e); } }
+
+/* ---- 顧客派生データ ---- */
+const cLogs = (c) => Object.keys(c.data.sleepLogs || {}).sort().map(d => ({ date: d, ...c.data.sleepLogs[d] }));
+const lastVisitOf = (c) => { const v = c.data.visits || []; return v.length ? v[v.length - 1].date : null; };
+const ticketRemainingOf = (c) => (c.data.tickets || []).filter(t => t.expiresAt >= todayStr()).reduce((a, t) => a + (t.total - t.used), 0);
+const avgScoreOf = (c, n = 7) => { const l = cLogs(c).slice(-n); return l.length ? Math.round(avg(l.map(x => x.score))) : null; };
+
+function followUpsOf(c) {
+  const out = [];
+  const lv = lastVisitOf(c);
+  if (lv && daysBetween(lv, todayStr()) >= 21) out.push({ type:'visit', label:`来店${daysBetween(lv, todayStr())}日空き` });
+  const logs = cLogs(c);
+  if (logs.length && daysBetween(logs[logs.length - 1].date, todayStr()) >= 7) out.push({ type:'log', label:'記録が7日以上停止' });
+  const remain = ticketRemainingOf(c);
+  if (remain === 0 && !c.data.subscription) out.push({ type:'ticket', label:'回数券なし' });
+  else if (remain === 1) out.push({ type:'ticket', label:'回数券のこり1回' });
+  (c.data.tickets || []).forEach(t => {
+    const left = t.total - t.used;
+    if (left > 0 && t.expiresAt >= todayStr() && daysBetween(todayStr(), t.expiresAt) <= 30) out.push({ type:'expire', label:`回数券の期限まで${daysBetween(todayStr(), t.expiresAt)}日` });
+  });
+  const sc = avgScoreOf(c);
+  if (sc != null && sc < 55) out.push({ type:'score', label:`平均スコア${sc}点と低め` });
+  return out;
+}
+
+/* ============================================================
+   UI部品・チャート
+   ============================================================ */
+function Btn({ children, kind = 'primary', onClick, disabled, full, small, className = '' }) {
+  const base = `btn-press inline-flex items-center justify-center gap-1.5 font-bold rounded-xl transition
+    ${small ? 'px-3 py-1.5 text-[12px]' : 'px-4 py-2.5 text-[13px]'} ${full ? 'w-full' : ''} ${disabled ? 'opacity-40 pointer-events-none' : ''}`;
+  const kinds = {
+    primary: 'bg-cream-100 text-night-900',
+    moon: 'bg-moon-400 text-night-900',
+    ghost: 'bg-night-600 text-cream-50 border border-night-400/40',
+    outline: 'bg-transparent text-night-100 border border-night-300/50',
+    danger: 'bg-[#df5346]/15 text-[#f0968c] border border-[#df5346]/40',
+  };
+  return <button className={`${base} ${kinds[kind]} ${className}`} onClick={onClick} disabled={disabled}>{children}</button>;
+}
+function Chip({ children, active, onClick, className = '' }) {
+  return <button onClick={onClick} className={`btn-press whitespace-nowrap px-3 py-1 rounded-full text-[11.5px] font-bold border ${active ? 'bg-cream-100 text-night-900 border-cream-100' : 'bg-night-600 text-night-100 border-night-400/40'} ${className}`}>{children}</button>;
+}
+function Badge({ children, tone = 'gray' }) {
+  const tones = {
+    gray: 'bg-night-500/60 text-night-100', gold: 'bg-moon-400/15 text-moon-300 border border-moon-400/40',
+    green: 'bg-cpara/15 text-[#4cc2ae] border border-cpara/40', red: 'bg-csymp/15 text-[#f0968c] border border-csymp/40',
+    blue: 'bg-cperi/15 text-[#a5b4f5] border border-cperi/40',
+  };
+  return <span className={`inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full ${tones[tone]}`}>{children}</span>;
+}
+function SectionTitle({ icon, title, sub, right }) {
+  return (
+    <div className="flex items-end justify-between mb-2.5">
+      <div>
+        <h2 className="text-[14px] font-black text-cream-50">{icon && <span className="mr-1">{icon}</span>}{title}</h2>
+        {sub && <p className="text-[10.5px] text-night-200 mt-0.5">{sub}</p>}
+      </div>
+      {right}
+    </div>
+  );
+}
+function ProgressBar({ pct, color = C.moon, h = 7 }) {
+  return <div className="w-full rounded-full overflow-hidden" style={{ height: h, background: C.night500 }}>
+    <div className="h-full rounded-full transition-all duration-500" style={{ width: clamp(pct, 0, 100) + '%', background: color }} /></div>;
+}
+function Modal({ open, onClose, children, wide }) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/60" style={{ backdropFilter:'blur(3px)' }} />
+      <div className={`relative w-full ${wide ? 'max-w-2xl' : 'max-w-md'} max-h-[86vh] overflow-y-auto bg-night-700 border border-night-400/40 rounded-2xl p-5 anim-slide-up`} onClick={e => e.stopPropagation()}>
+        {children}
+      </div>
+    </div>
+  );
+}
+function EmptyState({ emoji = '💤', text, sub }) {
+  return <div className="py-7 text-center"><div className="text-3xl mb-2">{emoji}</div>
+    <p className="text-[12.5px] font-bold text-night-100">{text}</p>{sub && <p className="text-[10.5px] text-night-200 mt-1">{sub}</p>}</div>;
+}
+function StatTile({ label, value, unit, sub, accent, onClick }) {
+  return (
+    <button onClick={onClick} className={`card p-3.5 text-left w-full ${onClick ? 'btn-press' : 'cursor-default'}`}>
+      <p className="text-[10px] font-bold text-night-200">{label}</p>
+      <p className="text-[24px] leading-tight font-black mt-1" style={{ color: accent || '#eef1f8' }}>{value}<span className="text-[11px] font-bold text-night-200 ml-0.5">{unit}</span></p>
+      {sub && <p className="text-[9.5px] text-night-300 mt-0.5">{sub}</p>}
+    </button>
+  );
+}
+
+function useTip() {
+  const [tip, setTip] = useState(null);
+  const show = (xPct, yPct, main, sub) => setTip(t => (t && t.main === main && t.sub === sub) ? null : { xPct, yPct, main, sub });
+  return { tip, show };
+}
+function TrendChart({ data, height = 150 }) {
+  const { tip, show } = useTip();
+  if (!data.length) return <EmptyState text="睡眠記録がありません" />;
+  const W = 420, H = 150, padL = 30, padR = 14, padT = 16, padB = 24;
+  const iw = W - padL - padR, ih = H - padT - padB;
+  const n = data.length;
+  const x = i => padL + (n === 1 ? iw / 2 : i * (iw / (n - 1)));
+  const y = v => padT + ih - (v / 100) * ih;
+  const line = data.map((d, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(d.score).toFixed(1)}`).join(' ');
+  const area = `${line} L${x(n - 1).toFixed(1)},${y(0)} L${x(0).toFixed(1)},${y(0)} Z`;
+  const labelEvery = Math.ceil(n / 7);
+  return (
+    <div className="relative">
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display:'block', height:'auto' }} role="img" aria-label="睡眠スコアの推移">
+        {[0, 50, 100].map(v => (
+          <g key={v}>
+            <line x1={padL} x2={W - padR} y1={y(v)} y2={y(v)} stroke={v === 0 ? C.axis : C.grid} strokeWidth={1} />
+            <text x={padL - 6} y={y(v) + 3.5} fontSize={9} fill={C.muted} textAnchor="end">{v}</text>
+          </g>
+        ))}
+        <path d={area} fill={C.gold} opacity={0.15} />
+        <path d={line} fill="none" stroke={C.gold} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+        {data.map((d, i) => (
+          <g key={d.date}>
+            <circle cx={x(i)} cy={y(d.score)} r={3} fill={C.gold} stroke="#222e4c" strokeWidth={1.5} />
+            <circle cx={x(i)} cy={y(d.score)} r={12} fill="transparent"
+              onClick={() => show(x(i) / W * 100, y(d.score) / H * 100, `${d.score}点`, fmtMDW(d.date))} />
+            {i % labelEvery === 0 && <text x={x(i)} y={H - 7} fontSize={8.5} fill={C.muted} textAnchor="middle">{fmtMD(d.date)}</text>}
+          </g>
+        ))}
+        <text x={x(n - 1)} y={y(data[n - 1].score) - 8} fontSize={11.5} fontWeight="700" fill="#eef1f8" textAnchor="middle">{data[n - 1].score}</text>
+      </svg>
+      {tip && <div className="viz-tip" style={{ left: tip.xPct + '%', top: tip.yPct + '%' }}>{tip.main}<br /><span className="tip-sub">{tip.sub}</span></div>}
+    </div>
+  );
+}
+function Spark({ data, w = 76, h = 26 }) {
+  if (!data.length) return <span className="text-[10px] text-night-300">記録なし</span>;
+  const n = data.length;
+  const x = i => 2 + i * ((w - 4) / Math.max(1, n - 1));
+  const y = v => 2 + (h - 4) - (v / 100) * (h - 4);
+  const line = data.map((d, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(d).toFixed(1)}`).join(' ');
+  return <svg width={w} height={h} aria-hidden="true"><path d={line} fill="none" stroke={C.gold} strokeWidth={1.8} strokeLinecap="round" /></svg>;
+}
+function BalanceGauge({ value }) {
+  const pct = clamp(value, -100, 100);
+  const half = Math.abs(pct) / 2;
+  const info = autonomicLabel(pct);
+  return (
+    <div>
+      <div className="flex justify-between text-[10.5px] font-bold mb-1">
+        <span style={{ color:'#f0968c' }}>⚡ 交感神経</span>
+        <span style={{ color:'#4cc2ae' }}>🌙 副交感神経</span>
+      </div>
+      <div className="relative h-3.5 rounded-full" style={{ background: C.night500 }}>
+        <div className="absolute top-0 bottom-0 w-[2px] left-1/2 -translate-x-1/2" style={{ background:'#3c4763' }} />
+        <div className="absolute top-0 bottom-0 rounded-full" style={pct >= 0 ? { left:'50%', width: half + '%', background: C.para } : { right:'50%', width: half + '%', background: C.symp }} />
+        <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full border-[3px]" style={{ left:(50 + pct / 2) + '%', background:'#eef1f8', borderColor: pct >= 0 ? C.para : C.symp }} />
+      </div>
+      <p className="text-[11px] font-black text-cream-50 mt-1">{info.short}<span className="text-night-200 font-medium text-[10px] ml-1.5">{info.label}</span></p>
+    </div>
+  );
+}
+
+/* ============================================================
+   アプリ本体（PIN → シェル → 各画面）
+   ============================================================ */
+const Ctx = createContext(null);
+const useApp = () => useContext(Ctx);
+const GOALS = { fallAsleep:'寝つきをよくしたい', wakeMid:'夜中に起きたくない', morning:'朝スッキリ起きたい', posture:'肩こり・姿勢' };
+
+function PinGate({ pin, onOk }) {
+  const [v, setV] = useState('');
+  const submit = () => { if (v === pin) onOk(); else { toast('PINがちがいます', 'err'); setV(''); } };
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center p-6" style={{ background:'linear-gradient(180deg,#0d1424,#131c31)' }}>
+      <Soupy size={110} animate />
+      <h1 className="text-[18px] font-black text-cream-50 mt-2">SLEEPY 管理コンソール</h1>
+      <p className="text-[11px] text-night-200 mt-1">スタッフ用PINを入力してください（デモ: 1234）</p>
+      <input value={v} onChange={e => setV(e.target.value.replace(/\D/g, '').slice(0, 4))} onKeyDown={e => e.key === 'Enter' && submit()}
+        type="password" inputMode="numeric" placeholder="••••" autoFocus
+        className="mt-5 w-40 text-center tracking-[.5em] bg-night-600 border border-night-400/50 rounded-2xl px-4 py-3 text-[22px] font-black text-cream-50 outline-none focus:border-moon-400" />
+      <div className="mt-4 w-40"><Btn kind="moon" full onClick={submit}>ひらく</Btn></div>
+      <a href="index.html" className="mt-8 text-[11px] font-bold text-night-300 underline">← 顧客向けアプリへもどる</a>
+    </div>
+  );
+}
+
+/* ---- ダッシュボード ---- */
+function Dashboard() {
+  const { admin, nav } = useApp();
+  const cs = admin.customers;
+  const t = todayStr(), from30 = addDays(t, -30);
+  const todayVisits = cs.flatMap(c => (c.data.visits || []).filter(v => v.date === t).map(v => ({ c, v })));
+  const monthVisits = cs.reduce((a, c) => a + (c.data.visits || []).filter(v => v.date >= from30).length, 0);
+  const monthSales = cs.reduce((a, c) => a + (c.data.orders || []).filter(o => o.date >= from30).reduce((x, o) => x + o.total, 0), 0);
+  const mrr = cs.reduce((a, c) => a + (c.data.subscription ? (SUB_PLAN[c.data.subscription.planId]?.price || 0) : 0), 0);
+  const scores = cs.map(c => avgScoreOf(c)).filter(v => v != null);
+  const follows = cs.map(c => ({ c, f: followUpsOf(c) })).filter(x => x.f.length).sort((a, b) => b.f.length - a.f.length);
+  const recentKarte = cs.flatMap(c => (c.data.visits || []).filter(v => v.karte).map(v => ({ c, v }))).sort((a, b) => b.v.date.localeCompare(a.v.date)).slice(0, 3);
+
+  return (
+    <div className="anim-slide-up">
+      <SectionTitle icon="📊" title="ダッシュボード" sub={fmtJP(t)} />
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5">
+        <StatTile label="顧客数" value={cs.length} unit="名" onClick={() => nav('customers')} />
+        <StatTile label="本日の来店" value={todayVisits.length} unit="件" accent={todayVisits.length ? '#f6d97e' : undefined} />
+        <StatTile label="直近30日の来店" value={monthVisits} unit="件" />
+        <StatTile label="直近30日の物販売上" value={monthSales.toLocaleString()} unit="円" onClick={() => nav('sales')} />
+        <StatTile label="サブスク月額(MRR)" value={mrr.toLocaleString()} unit="円" onClick={() => nav('sales')} />
+        <StatTile label="要フォロー" value={follows.length} unit="名" accent={follows.length ? '#f0968c' : '#4cc2ae'} />
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-3 mt-4">
+        <div>
+          <SectionTitle icon="🔔" title="要フォローのお客さま" sub="来店間隔・記録停止・回数券から自動抽出" />
+          <div className="flex flex-col gap-1.5">
+            {follows.length === 0 && <div className="card"><EmptyState emoji="🎉" text="フォローが必要なお客さまはいません" /></div>}
+            {follows.slice(0, 6).map(({ c, f }) => (
+              <button key={c.id} onClick={() => nav('customer', c.id)} className="btn-press card px-3.5 py-2.5 flex items-center gap-3 text-left">
+                <span className="w-9 h-9 rounded-full bg-night-500 flex items-center justify-center text-[13px] font-black text-cream-50 shrink-0">{c.data.profile.name.slice(0, 1)}</span>
+                <span className="flex-1 min-w-0">
+                  <span className="block text-[12.5px] font-black text-cream-50 truncate">{c.data.profile.name}</span>
+                  <span className="flex flex-wrap gap-1 mt-1">{f.slice(0, 2).map((x, i) => <Badge key={i} tone="red">{x.label}</Badge>)}</span>
+                </span>
+                <span className="text-night-300">→</span>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <SectionTitle icon="🏥" title="本日の来店" />
+          <div className="flex flex-col gap-1.5 mb-4">
+            {todayVisits.length === 0 && <div className="card"><EmptyState emoji="🌙" text="本日の来店記録はまだありません" sub="お客さまがチェックインすると表示されます" /></div>}
+            {todayVisits.map(({ c, v }, i) => (
+              <button key={i} onClick={() => nav('customer', c.id)} className="btn-press card px-3.5 py-2.5 flex items-center gap-3 text-left">
+                <span className="text-[15px]">🏥</span>
+                <span className="flex-1 text-[12.5px] font-black text-cream-50">{c.data.profile.name}</span>
+                <span className="text-[10.5px] text-night-200">{v.menu}</span>
+              </button>
+            ))}
+          </div>
+          <SectionTitle icon="📄" title="最近の改善レポート" />
+          <div className="flex flex-col gap-1.5">
+            {recentKarte.length === 0 && <div className="card"><EmptyState text="レポートはまだありません" /></div>}
+            {recentKarte.map(({ c, v }, i) => (
+              <button key={i} onClick={() => nav('customer', c.id)} className="btn-press card px-3.5 py-2.5 flex items-center gap-3 text-left">
+                <span className="text-[15px]">📄</span>
+                <span className="flex-1 min-w-0">
+                  <span className="block text-[12px] font-black text-cream-50 truncate">{c.data.profile.name}<span className="text-night-300 font-medium text-[10px] ml-1.5">{fmtMDW(v.date)}</span></span>
+                </span>
+                {v.karte.before && v.karte.after && (
+                  <span className="text-[11.5px] font-black"><span className="text-night-200">{v.karte.before.score}</span>
+                    <span className="text-night-300 mx-1">→</span><span style={{ color:'#4cc2ae' }}>{v.karte.after.score}点</span></span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---- 顧客一覧 ---- */
+function Customers() {
+  const { admin, nav } = useApp();
+  const [q, setQ] = useState('');
+  const [sort, setSort] = useState('visit');
+  const list = useMemo(() => {
+    let l = admin.customers.filter(c => {
+      const s = q.trim();
+      if (!s) return true;
+      return (c.data.profile.name + c.kana + c.data.profile.memberNo).includes(s);
+    });
+    if (sort === 'visit') l = [...l].sort((a, b) => (lastVisitOf(b) || '').localeCompare(lastVisitOf(a) || ''));
+    if (sort === 'score') l = [...l].sort((a, b) => (avgScoreOf(a) ?? 999) - (avgScoreOf(b) ?? 999));
+    if (sort === 'name') l = [...l].sort((a, b) => (a.kana || a.data.profile.name).localeCompare(b.kana || b.data.profile.name, 'ja'));
+    return l;
+  }, [admin.customers, q, sort]);
+
+  return (
+    <div className="anim-slide-up">
+      <SectionTitle icon="👥" title="顧客" sub={`${admin.customers.length}名`} />
+      <div className="flex flex-col sm:flex-row gap-2 mb-3">
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder="🔍 名前・かな・会員番号でさがす"
+          className="flex-1 bg-night-600 border border-night-400/50 rounded-xl px-3.5 py-2.5 text-[13px] font-bold text-cream-50 outline-none focus:border-moon-400" />
+        <div className="flex gap-1.5">
+          <Chip active={sort === 'visit'} onClick={() => setSort('visit')}>来店が新しい順</Chip>
+          <Chip active={sort === 'score'} onClick={() => setSort('score')}>スコアが低い順</Chip>
+          <Chip active={sort === 'name'} onClick={() => setSort('name')}>名前順</Chip>
+        </div>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        {list.length === 0 && <div className="card"><EmptyState text="該当するお客さまが見つかりません" /></div>}
+        {list.map(c => {
+          const lv = lastVisitOf(c);
+          const follows = followUpsOf(c);
+          const spark = cLogs(c).slice(-7).map(l => l.score);
+          const level = levelFromXp(c.data.soupy.xp).lv;
+          const sub = c.data.subscription && SUB_PLAN[c.data.subscription.planId];
+          return (
+            <button key={c.id} onClick={() => nav('customer', c.id)} className="btn-press card px-3.5 py-3 flex items-center gap-3 text-left">
+              <span className="w-10 h-10 rounded-full bg-night-500 flex items-center justify-center text-[14px] font-black text-cream-50 shrink-0">{c.data.profile.name.slice(0, 1)}</span>
+              <span className="flex-1 min-w-0">
+                <span className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[13px] font-black text-cream-50">{c.data.profile.name}</span>
+                  <Badge tone="gold">Lv.{level}</Badge>
+                  {sub && <Badge tone="blue">{sub.emoji} {sub.name}</Badge>}
+                  {follows.slice(0, 1).map((f, i) => <Badge key={i} tone="red">{f.label}</Badge>)}
+                </span>
+                <span className="block text-[10px] text-night-300 mt-0.5">
+                  {c.data.profile.memberNo} ・ 最終来店 {lv ? `${fmtMD(lv)}（${daysBetween(lv, todayStr())}日前）` : 'なし'} ・ 🎫のこり{ticketRemainingOf(c)}回
+                </span>
+              </span>
+              <span className="hidden sm:block"><Spark data={spark} /></span>
+              <span className="w-11 text-right text-[15px] font-black" style={{ color: avgScoreOf(c) != null ? scoreLabel(avgScoreOf(c)).color : C.night300 }}>
+                {avgScoreOf(c) ?? '−'}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ---- 顧客カルテ詳細 ---- */
+function KarteModalBody({ karte }) {
+  return (
+    <div>
+      <h3 className="text-[15px] font-black text-cream-50 mb-1">📄 改善レポート</h3>
+      <p className="text-[10.5px] text-night-200 mb-3">{karte.date ? fmtJP(karte.date) : ''}</p>
+      {karte.before && karte.after && (
+        <div className="card-deep p-3 mb-2.5 flex items-center justify-center gap-4">
+          <span className="text-[10px] font-black text-[#f0968c]">BEFORE {karte.before.score}点</span>
+          <span className="text-moon-300 font-black">→</span>
+          <span className="text-[13px] font-black text-[#4cc2ae]">AFTER {karte.after.score}点</span>
+        </div>
+      )}
+      {karte.feelBefore && karte.feelAfter && (
+        <div className="card-deep p-3 mb-2.5 text-[11.5px] text-night-100">
+          🖐️ 体感 かるさ {karte.feelBefore.light}→{karte.feelAfter.light} ／ 首肩 {karte.feelBefore.neck}→{karte.feelAfter.neck} ／ 気分 {karte.feelBefore.mood}→{karte.feelAfter.mood}
+        </div>
+      )}
+      {(karte.comments || []).map((t, i) => <p key={i} className="text-[11.5px] text-night-100 leading-relaxed mb-1.5">・{t}</p>)}
+      {(karte.prescribed || []).length > 0 && (
+        <div className="mt-2">
+          <p className="text-[10.5px] font-black text-night-200 mb-1">💊 処方</p>
+          <div className="flex flex-wrap gap-1">{karte.prescribed.map(id => {
+            const s = STRETCH[id], p = PRODUCT[id];
+            return <Badge key={id} tone="gold">{s ? `${s.emoji} ${s.name}` : p ? `${p.emoji} ${p.name}` : id}</Badge>;
+          })}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CustomerDetail({ id }) {
+  const { admin, update, nav, importJsonToCustomer } = useApp();
+  const c = admin.customers.find(x => x.id === id);
+  const [tab, setTab] = useState('overview');
+  const [memo, setMemo] = useState(c ? c.adminMemo : '');
+  const [karte, setKarte] = useState(null);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const fileRef = useRef(null);
+  useEffect(() => { if (c) setMemo(c.adminMemo); }, [id]);
+  if (!c) return <EmptyState text="お客さまが見つかりません" />;
+
+  const logs = cLogs(c);
+  const last = logs[logs.length - 1];
+  const lvDate = lastVisitOf(c);
+  const level = levelFromXp(c.data.soupy.xp);
+  const sub = c.data.subscription && SUB_PLAN[c.data.subscription.planId];
+  const follows = followUpsOf(c);
+  const assess = (c.data.assessments || [])[c.data.assessments.length - 1];
+  const quick = (c.data.quickChecks || [])[c.data.quickChecks.length - 1];
+  const presc = c.data.prescription;
+
+  // 姿勢: pairId ごとにまとめる
+  const pairs = [];
+  const singles = [];
+  const byPair = {};
+  (c.data.posture || []).forEach(p => {
+    if (p.pairId) { (byPair[p.pairId] = byPair[p.pairId] || []).push(p); }
+    else singles.push(p);
+  });
+  Object.values(byPair).forEach(g => {
+    const before = g.find(p => p.phase === 'before'), after = g.find(p => p.phase === 'after');
+    if (before && after) pairs.push({ before, after }); else singles.push(...g);
+  });
+  pairs.sort((a, b) => b.after.date.localeCompare(a.after.date));
+
+  const habitCount7 = {};
+  logs.slice(-7).forEach(l => (l.habits || []).forEach(h => { habitCount7[h] = (habitCount7[h] || 0) + 1; }));
+
+  const saveMemo = () => { update(st => { const x = st.customers.find(y => y.id === id); if (x) x.adminMemo = memo; }); toast('メモを保存しました'); };
+  const exportJson = () => {
+    const blob = new Blob([JSON.stringify(c.data, null, 2)], { type:'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `sleepy_${c.data.profile.memberNo}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  };
+  const onImportFile = (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    const rd = new FileReader();
+    rd.onload = () => { importJsonToCustomer(id, rd.result); };
+    rd.readAsText(f);
+    e.target.value = '';
+  };
+  const importFromDevice = () => {
+    const raw = localStorage.getItem('sleepy_app_v1');
+    if (!raw) { toast('この端末に顧客アプリのデータがありません', 'err'); return; }
+    importJsonToCustomer(id, raw);
+  };
+
+  const TABS = [
+    { id:'overview', label:'がいよう' }, { id:'sleep', label:'すいみん' }, { id:'posture', label:'しせい' },
+    { id:'visits', label:'来店' }, { id:'purchase', label:'購入' }, { id:'io', label:'データ' },
+  ];
+
+  return (
+    <div className="anim-slide-up">
+      <button onClick={() => nav('customers')} className="btn-press text-[11.5px] font-bold text-night-200 mb-2">← 顧客一覧へ</button>
+      <div className="card p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="w-12 h-12 rounded-full bg-night-500 flex items-center justify-center text-[17px] font-black text-cream-50">{c.data.profile.name.slice(0, 1)}</span>
+          <div className="flex-1 min-w-[180px]">
+            <p className="text-[16px] font-black text-cream-50">{c.data.profile.name} <span className="text-[10.5px] text-night-300 font-medium">{c.kana}</span></p>
+            <p className="text-[10.5px] text-night-200 mt-0.5">{c.data.profile.memberNo} ・ {c.phone || '電話未登録'} ・ お悩み：{GOALS[c.data.profile.goal] || '−'}</p>
+            <div className="flex flex-wrap gap-1 mt-1.5">
+              <Badge tone="gold">🐑 Lv.{level.lv} {stageTitle(level.lv)}</Badge>
+              {sub && <Badge tone="blue">{sub.emoji} {sub.name}</Badge>}
+              {follows.map((f, i) => <Badge key={i} tone="red">{f.label}</Badge>)}
+            </div>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] text-night-300">最終来店</p>
+            <p className="text-[13px] font-black text-cream-50">{lvDate ? `${fmtMDW(lvDate)}` : 'なし'}</p>
+            {lvDate && <p className="text-[10px] text-night-300">{daysBetween(lvDate, todayStr())}日前</p>}
+          </div>
+        </div>
+        <div className="mt-3">
+          <p className="text-[10.5px] font-black text-night-200 mb-1">スタッフメモ（お客さまには見えません）</p>
+          <textarea value={memo} onChange={e => setMemo(e.target.value)} rows={2}
+            className="w-full bg-night-600 border border-night-400/50 rounded-xl px-3 py-2 text-[12px] font-bold text-cream-50 outline-none focus:border-moon-400" />
+          <div className="mt-1.5"><Btn small onClick={saveMemo}>メモを保存</Btn></div>
+        </div>
+      </div>
+
+      <div className="flex gap-1.5 mt-3 overflow-x-auto pb-1">
+        {TABS.map(t => <Chip key={t.id} active={tab === t.id} onClick={() => setTab(t.id)}>{t.label}</Chip>)}
+      </div>
+
+      {tab === 'overview' && (
+        <div className="mt-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+            <StatTile label="直近の睡眠スコア" value={last ? last.score : '−'} unit="点" accent={last ? scoreLabel(last.score).color : undefined} sub={last ? fmtMDW(last.date) : ''} />
+            <StatTile label="7日平均" value={avgScoreOf(c) ?? '−'} unit="点" />
+            <StatTile label="回数券ざんだか" value={ticketRemainingOf(c)} unit="回" />
+            <StatTile label="累計来店" value={(c.data.visits || []).length} unit="回" />
+          </div>
+          {last && <div className="card p-4 mt-3"><BalanceGauge value={last.balance ?? calcAutonomic(last)} /></div>}
+          {presc && presc.until >= todayStr() && (
+            <div className="card p-3.5 mt-3">
+              <p className="text-[11px] font-black text-cream-50 mb-1.5">💊 現在のホームケア処方 <span className="text-[9.5px] text-night-300 font-medium">{fmtMD(presc.until)}まで</span></p>
+              <div className="flex flex-wrap gap-1">{presc.items.map(pid => {
+                const s = STRETCH[pid], p = PRODUCT[pid];
+                return <Badge key={pid} tone="gold">{s ? `${s.emoji} ${s.name}` : p ? `${p.emoji} ${p.name}` : pid}</Badge>;
+              })}</div>
+            </div>
+          )}
+          <div className="grid md:grid-cols-2 gap-3 mt-3">
+            {assess && (
+              <div className="card p-4">
+                <p className="text-[11px] font-black text-cream-50 mb-2">🔬 本診断 <span className="text-night-300 font-medium text-[9.5px]">{fmtMD(assess.date)}・総合{assess.total}点（ランク{assess.level?.rank}）</span></p>
+                {ASSESS_CATS.map(cat => (
+                  <div key={cat.id} className="flex items-center gap-2 py-1">
+                    <span className="w-[92px] text-[10.5px] font-bold text-night-100 shrink-0">{cat.emoji} {cat.name}</span>
+                    <div className="flex-1"><ProgressBar pct={assess.cats[cat.id]} color={assess.cats[cat.id] >= 70 ? C.peri : C.serious} h={7} /></div>
+                    <span className="w-7 text-right text-[11px] font-black text-night-100">{assess.cats[cat.id]}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {quick && (
+              <div className="card p-4">
+                <p className="text-[11px] font-black text-cream-50 mb-1.5">📋 かんたん診断 <span className="text-night-300 font-medium text-[9.5px]">{fmtMD(quick.date)}</span></p>
+                <p className="text-[20px] font-black text-moon-300">{quick.score}<span className="text-[10px] text-night-200">点</span>
+                  <span className="text-[12px] text-cream-50 ml-2">{quick.emoji} {quick.label}</span></p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {tab === 'sleep' && (
+        <div className="mt-3">
+          <div className="card p-4"><TrendChart data={logs.slice(-21).map(l => ({ date: l.date, score: l.score }))} /></div>
+          <div className="card p-4 mt-3">
+            <p className="text-[11px] font-black text-cream-50 mb-2">この7日間の行動</p>
+            {Object.keys(habitCount7).length === 0 && <p className="text-[11px] text-night-300">行動チェックの記録がありません</p>}
+            <div className="flex flex-wrap gap-1.5">
+              {Object.entries(habitCount7).sort((a, b) => b[1] - a[1]).map(([hid, n]) => (
+                <Badge key={hid} tone={HABIT[hid]?.good ? 'green' : 'red'}>{HABIT[hid]?.icon} {HABIT[hid]?.label} ×{n}</Badge>
+              ))}
+            </div>
+          </div>
+          <div className="card p-2 mt-3">
+            {logs.slice(-10).reverse().map(l => (
+              <div key={l.date} className="flex items-center gap-3 px-3 py-2 border-b border-night-500/40 last:border-0">
+                <span className="w-16 text-[10.5px] font-bold text-night-200">{fmtMDW(l.date)}</span>
+                <span className="w-10 text-[13px] font-black" style={{ color: scoreLabel(l.score).color }}>{l.score}<span className="text-[8.5px]">点</span></span>
+                <div className="flex-1"><ProgressBar pct={l.score} color={scoreLabel(l.score).color} h={5} /></div>
+                <span className="text-[10px] text-night-200 font-bold">{sleepHours(l.bed, l.wake)}h・覚醒{l.awakenings || 0}回</span>
+              </div>
+            ))}
+            {logs.length === 0 && <EmptyState text="睡眠記録がありません" sub="アプリ連携（データタブ）で取り込めます" />}
+          </div>
+        </div>
+      )}
+
+      {tab === 'posture' && (
+        <div className="mt-3">
+          {pairs.length === 0 && singles.length === 0 && <div className="card"><EmptyState emoji="📸" text="姿勢分析のデータがありません" /></div>}
+          {pairs.map(({ before, after }, i) => (
+            <div key={i} className="card p-4 mb-2.5">
+              <p className="text-[11px] font-black text-cream-50 mb-2">{fmtJP(after.date)} ・ {after.mode === 'front' ? '正面' : '側面'} Before/After</p>
+              <div className="flex items-center justify-center gap-5">
+                <div className="text-center"><p className="text-[9.5px] font-black text-[#f0968c]">BEFORE</p><p className="text-[22px] font-black text-night-100">{before.score}</p></div>
+                <span className="text-moon-300 text-[18px] font-black">→</span>
+                <div className="text-center"><p className="text-[9.5px] font-black text-[#4cc2ae]">AFTER</p><p className="text-[26px] font-black" style={{ color: scoreLabel(after.score).color }}>{after.score}</p></div>
+                <Badge tone={after.score > before.score ? 'green' : 'gray'}>{after.score > before.score ? `+${after.score - before.score}点 改善` : '維持'}</Badge>
+              </div>
+              {after.mode === 'side' && (
+                <p className="text-[10.5px] text-night-200 text-center mt-2">頭部前方角 {before.metrics.fha?.toFixed(1)}° → <span className="font-black text-[#4cc2ae]">{after.metrics.fha?.toFixed(1)}°</span></p>
+              )}
+              {after.mode === 'front' && (
+                <p className="text-[10.5px] text-night-200 text-center mt-2">肩の傾き {Math.abs(before.metrics.shoulderTilt).toFixed(1)}° → <span className="font-black text-[#4cc2ae]">{Math.abs(after.metrics.shoulderTilt).toFixed(1)}°</span></p>
+              )}
+            </div>
+          ))}
+          {singles.map(p => (
+            <div key={p.id} className="card px-4 py-3 mb-1.5 flex items-center gap-3">
+              <span className="text-[15px]">🧍</span>
+              <span className="flex-1 text-[11.5px] font-bold text-cream-50">{fmtJP(p.date)} ・ {p.mode === 'front' ? '正面' : '側面'}（{p.phase === 'normal' ? 'ふだん' : p.phase}）</span>
+              <span className="text-[16px] font-black" style={{ color: scoreLabel(p.score).color }}>{p.score}<span className="text-[9px]">点</span></span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab === 'visits' && (
+        <div className="mt-3 flex flex-col gap-1.5">
+          {(c.data.visits || []).length === 0 && <div className="card"><EmptyState emoji="🏥" text="来店記録がありません" /></div>}
+          {[...(c.data.visits || [])].reverse().map(v => (
+            <div key={v.id} className="card px-4 py-3">
+              <div className="flex items-center gap-2.5">
+                <span className="text-[14px]">🏥</span>
+                <span className="text-[12px] font-black text-cream-50">{fmtJP(v.date)}</span>
+                <span className="text-[10.5px] text-night-200 ml-auto">{v.menu}</span>
+              </div>
+              {v.note && <p className="text-[10.5px] text-night-200 mt-1 pl-6">{v.note}</p>}
+              {v.karte && <button onClick={() => setKarte(v.karte)} className="btn-press text-[10.5px] font-black text-moon-300 mt-1.5 pl-6">📄 改善レポートを見る</button>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab === 'purchase' && (
+        <div className="mt-3">
+          <SectionTitle icon="🎫" title="回数券" />
+          <div className="flex flex-col gap-2 mb-4">
+            {(c.data.tickets || []).length === 0 && <div className="card"><EmptyState text="回数券なし" /></div>}
+            {(c.data.tickets || []).map(tk => {
+              const left = tk.total - tk.used;
+              const expired = tk.expiresAt < todayStr();
+              return (
+                <div key={tk.id} className={`card p-3.5 ${expired || left === 0 ? 'opacity-60' : ''}`}>
+                  <div className="flex items-center gap-3">
+                    <span className="text-[18px] font-black text-cream-50 w-14">{left}<span className="text-[10px] text-night-200">/{tk.total}</span></span>
+                    <div className="flex-1">
+                      <p className="text-[11.5px] font-black text-cream-50">{tk.name}</p>
+                      <div className="mt-1"><ProgressBar pct={left / tk.total * 100} color={left && !expired ? C.moon : C.night300} h={6} /></div>
+                      <p className="text-[9.5px] text-night-300 mt-0.5">期限 {fmtJP(tk.expiresAt)}{expired && '（期限切れ）'}</p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <SectionTitle icon="📅" title="サブスク" />
+          <div className="card p-3.5 mb-4">
+            {sub
+              ? <p className="text-[12px] font-bold text-cream-50">{sub.emoji} {sub.name}（{sub.cadence}・{yen(sub.price)}/月）<span className="text-[10px] text-night-300 ml-1.5">{fmtJP(c.data.subscription.since)}〜</span></p>
+              : <p className="text-[11.5px] text-night-200">未加入 {ticketRemainingOf(c) === 0 && <Badge tone="gold">プラン提案チャンス</Badge>}</p>}
+          </div>
+          <SectionTitle icon="🛍️" title="購入履歴" />
+          <div className="flex flex-col gap-1.5">
+            {(c.data.orders || []).length === 0 && <div className="card"><EmptyState text="購入履歴なし" /></div>}
+            {[...(c.data.orders || [])].reverse().map(o => (
+              <div key={o.id} className="card px-4 py-3 flex items-center gap-3">
+                <span className="text-[14px]">🛍️</span>
+                <span className="flex-1 min-w-0">
+                  <span className="block text-[11.5px] font-bold text-cream-50 truncate">{o.items.map(it => `${PRODUCT[it.id]?.name || it.id}×${it.qty}`).join('、')}</span>
+                  <span className="block text-[9.5px] text-night-300">{fmtJP(o.date)}</span>
+                </span>
+                <span className="text-[13px] font-black text-cream-50">{yen(o.total)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tab === 'io' && (
+        <div className="mt-3">
+          <div className="card p-4">
+            <p className="text-[12px] font-black text-cream-50 mb-1">📲 顧客アプリからデータを取り込む</p>
+            <p className="text-[10.5px] text-night-200 leading-relaxed mb-3">お客さまのアプリ「せってい → データを書き出す」で保存したJSONを取り込むと、このカルテが最新になります。（実運用ではサーバー同期に置き換え）</p>
+            <div className="flex flex-wrap gap-2">
+              <Btn kind="moon" onClick={() => fileRef.current && fileRef.current.click()}>📁 JSONファイルを取り込む</Btn>
+              <Btn kind="ghost" onClick={importFromDevice}>📱 この端末の顧客アプリから取り込む</Btn>
+              <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={onImportFile} />
+            </div>
+          </div>
+          <div className="card p-4 mt-3 flex flex-wrap gap-2 items-center">
+            <Btn kind="ghost" onClick={exportJson}>💾 この顧客データを書き出す</Btn>
+            <Btn kind="danger" onClick={() => setConfirmDel(true)}>🗑️ この顧客を削除</Btn>
+          </div>
+        </div>
+      )}
+
+      <Modal open={!!karte} onClose={() => setKarte(null)}>
+        {karte && <div><KarteModalBody karte={karte} /><div className="mt-4"><Btn full onClick={() => setKarte(null)}>とじる</Btn></div></div>}
+      </Modal>
+      <Modal open={confirmDel} onClose={() => setConfirmDel(false)}>
+        <div className="text-center py-2">
+          <span className="text-[36px]">🗑️</span>
+          <h3 className="text-[15px] font-black text-cream-50 mt-2">{c.data.profile.name}さまのデータを削除しますか？</h3>
+          <p className="text-[11px] text-night-200 mt-1.5">この操作は元に戻せません。</p>
+          <div className="mt-4 flex gap-2">
+            <Btn kind="ghost" full onClick={() => setConfirmDel(false)}>やめる</Btn>
+            <Btn kind="danger" full onClick={() => { update(st => { st.customers = st.customers.filter(x => x.id !== id); }); setConfirmDel(false); nav('customers'); toast('削除しました'); }}>削除する</Btn>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+/* ---- 売上 ---- */
+function Sales() {
+  const { admin, nav } = useApp();
+  const from30 = addDays(todayStr(), -30);
+  const orders = admin.customers.flatMap(c => (c.data.orders || []).map(o => ({ ...o, cname: c.data.profile.name, cid: c.id }))).sort((a, b) => b.date.localeCompare(a.date));
+  const monthOrders = orders.filter(o => o.date >= from30);
+  const monthTotal = monthOrders.reduce((a, o) => a + o.total, 0);
+  const mrr = admin.customers.reduce((a, c) => a + (c.data.subscription ? (SUB_PLAN[c.data.subscription.planId]?.price || 0) : 0), 0);
+  const subCount = admin.customers.filter(c => c.data.subscription).length;
+  const rank = {};
+  orders.forEach(o => o.items.forEach(it => { rank[it.id] = (rank[it.id] || 0) + it.qty; }));
+  const ranking = Object.entries(rank).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  const maxQty = ranking.length ? ranking[0][1] : 1;
+
+  return (
+    <div className="anim-slide-up">
+      <SectionTitle icon="💰" title="売上" sub="物販・回数券・サブスク（デモ集計）" />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+        <StatTile label="直近30日の物販・回数券" value={monthTotal.toLocaleString()} unit="円" />
+        <StatTile label="直近30日の注文数" value={monthOrders.length} unit="件" />
+        <StatTile label="サブスク会員" value={subCount} unit="名" />
+        <StatTile label="サブスク月額(MRR)" value={mrr.toLocaleString()} unit="円" accent="#f6d97e" />
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-3 mt-4">
+        <div>
+          <SectionTitle icon="🏆" title="売れすじランキング" sub="累計販売数" />
+          <div className="card p-4">
+            {ranking.length === 0 && <EmptyState text="注文がありません" />}
+            {ranking.map(([pid, qty], i) => (
+              <div key={pid} className="flex items-center gap-2.5 py-1.5">
+                <span className="w-5 text-[12px] font-black text-moon-300">{i + 1}</span>
+                <span className="w-6 text-[14px]">{PRODUCT[pid]?.emoji}</span>
+                <span className="flex-1 text-[11.5px] font-bold text-cream-50 truncate">{PRODUCT[pid]?.name || pid}</span>
+                <div className="w-24"><ProgressBar pct={qty / maxQty * 100} color={C.peri} h={7} /></div>
+                <span className="w-8 text-right text-[11.5px] font-black text-night-100">{qty}個</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div>
+          <SectionTitle icon="🧾" title="最近の注文" />
+          <div className="flex flex-col gap-1.5">
+            {orders.slice(0, 8).map(o => (
+              <button key={o.id} onClick={() => nav('customer', o.cid)} className="btn-press card px-3.5 py-2.5 flex items-center gap-3 text-left">
+                <span className="text-[13px]">🛍️</span>
+                <span className="flex-1 min-w-0">
+                  <span className="block text-[11.5px] font-black text-cream-50">{o.cname}<span className="text-night-300 font-medium text-[9.5px] ml-1.5">{fmtMD(o.date)}</span></span>
+                  <span className="block text-[10px] text-night-200 truncate">{o.items.map(it => `${PRODUCT[it.id]?.name || it.id}×${it.qty}`).join('、')}</span>
+                </span>
+                <span className="text-[12.5px] font-black text-cream-50">{yen(o.total)}</span>
+              </button>
+            ))}
+            {orders.length === 0 && <div className="card"><EmptyState text="注文がありません" /></div>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---- 設定 ---- */
+function AdminSettings() {
+  const { admin, update, replaceAll } = useApp();
+  const [pin, setPin] = useState(admin.pin);
+  const [confirm, setConfirm] = useState(false);
+  return (
+    <div className="anim-slide-up max-w-lg">
+      <SectionTitle icon="⚙️" title="設定" />
+      <div className="card p-4">
+        <p className="text-[11.5px] font-black text-cream-50 mb-1.5">スタッフPIN（4桁）</p>
+        <div className="flex gap-2">
+          <input value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+            className="w-28 text-center bg-night-600 border border-night-400/50 rounded-xl px-3 py-2 text-[15px] font-black text-cream-50 outline-none focus:border-moon-400" />
+          <Btn small onClick={() => { if (pin.length !== 4) { toast('4桁で入力してください', 'err'); return; } update(st => { st.pin = pin; }); toast('PINを変更しました'); }}>変更する</Btn>
+        </div>
+      </div>
+      <div className="card p-4 mt-3 flex flex-col gap-2">
+        <Btn kind="ghost" full onClick={() => setConfirm(true)}>🧪 デモ顧客データをリセット</Btn>
+        <a href="index.html" className="btn-press inline-flex items-center justify-center gap-1.5 font-bold rounded-xl px-4 py-2.5 text-[13px] w-full bg-night-600 text-cream-50 border border-night-400/40">📱 顧客向けアプリをひらく</a>
+      </div>
+      <div className="card p-4 mt-3 text-[10.5px] text-night-200 leading-relaxed">
+        <p className="text-[11.5px] font-black text-cream-50 mb-1">このコンソールについて</p>
+        <p>顧客データはこの端末のブラウザ（localStorage）にのみ保存されるデモ版です。実運用では認証付きのバックエンド（DB/API）に接続し、顧客アプリと自動同期する構成に置き換えてください。</p>
+        <p className="mt-2 text-moon-300 font-bold">─ 睡眠から、人生を変える。─ 株式会社SLEEPY</p>
+      </div>
+      <Modal open={confirm} onClose={() => setConfirm(false)}>
+        <div className="text-center py-2">
+          <span className="text-[36px]">🧪</span>
+          <h3 className="text-[15px] font-black text-cream-50 mt-2">デモ顧客データで初期化しますか？</h3>
+          <p className="text-[11px] text-night-200 mt-1.5">現在の顧客データ・メモはすべて置き換わります。</p>
+          <div className="mt-4 flex gap-2">
+            <Btn kind="ghost" full onClick={() => setConfirm(false)}>やめる</Btn>
+            <Btn kind="danger" full onClick={() => { replaceAll(seedAdmin()); setConfirm(false); toast('初期化しました'); }}>初期化する</Btn>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+/* ---- シェル ---- */
+const NAV = [
+  { id:'dash', icon:'📊', label:'ダッシュボード' },
+  { id:'customers', icon:'👥', label:'顧客' },
+  { id:'sales', icon:'💰', label:'売上' },
+  { id:'settings', icon:'⚙️', label:'設定' },
+];
+
+function App() {
+  const [admin, setAdmin] = useState(loadAdmin);
+  const [locked, setLocked] = useState(true);
+  const [route, setRoute] = useState({ name:'dash', id:null });
+
+  const update = useCallback((fn) => setAdmin(prev => { const n = structuredClone(prev); fn(n); saveAdmin(n); return n; }), []);
+  const replaceAll = useCallback((st) => { saveAdmin(st); setAdmin(st); setRoute({ name:'dash', id:null }); }, []);
+  const nav = useCallback((name, id) => { setRoute({ name: name === 'customer' ? 'customer' : name, id: id || null }); window.scrollTo(0, 0); }, []);
+
+  const importJsonToCustomer = useCallback((customerId, jsonText) => {
+    try {
+      const data = JSON.parse(jsonText);
+      if (!data || data.version !== 1 || !data.profile) { toast('データ形式が正しくありません', 'err'); return; }
+      update(st => {
+        const target = customerId ? st.customers.find(x => x.id === customerId)
+          : st.customers.find(x => x.data.profile.memberNo === data.profile.memberNo);
+        if (target) { target.data = data; target.importedAt = todayStr(); }
+        else st.customers.unshift({ id: uid(), kana:'', phone:'', adminMemo:'', importedAt: todayStr(), data });
+      });
+      toast(`「${data.profile.name || 'ゲスト'}」さまのデータを取り込みました 📲`);
+    } catch (e) { console.warn(e); toast('読み込みに失敗しました', 'err'); }
+  }, [update]);
+
+  if (locked) return <PinGate pin={admin.pin} onOk={() => setLocked(false)} />;
+
+  let screen = null;
+  if (route.name === 'dash') screen = <Dashboard />;
+  else if (route.name === 'customers') screen = <Customers />;
+  else if (route.name === 'customer') screen = <CustomerDetail id={route.id} />;
+  else if (route.name === 'sales') screen = <Sales />;
+  else if (route.name === 'settings') screen = <AdminSettings />;
+
+  const activeNav = route.name === 'customer' ? 'customers' : route.name;
+
+  return (
+    <Ctx.Provider value={{ admin, update, replaceAll, nav, importJsonToCustomer }}>
+      <div className="min-h-screen flex">
+        {/* サイドバー（PC） */}
+        <aside className="hidden md:flex flex-col w-56 shrink-0 border-r border-night-600/70 bg-night-800/60 p-4 sticky top-0 h-screen">
+          <div className="flex items-center gap-2.5 px-1">
+            <img src="assets/logo.jpg" alt="" className="w-9 h-9 rounded-xl object-cover border border-night-400/40" onError={e => { e.currentTarget.style.display='none'; }} />
+            <div>
+              <p className="text-[12.5px] font-black text-cream-50 leading-tight">SLEEPY</p>
+              <p className="text-[9px] text-night-200 font-bold">管理コンソール</p>
+            </div>
+          </div>
+          <nav className="mt-6 flex flex-col gap-1">
+            {NAV.map(n => (
+              <button key={n.id} onClick={() => nav(n.id)}
+                className={`btn-press flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[12.5px] font-black text-left ${activeNav === n.id ? 'bg-moon-400/15 text-moon-300 border border-moon-400/30' : 'text-night-100 hover:bg-night-600/60'}`}>
+                <span>{n.icon}</span>{n.label}
+              </button>
+            ))}
+          </nav>
+          <div className="mt-auto flex flex-col gap-2">
+            <div className="flex justify-center"><Soupy size={80} animate /></div>
+            <Btn kind="outline" small onClick={() => setLocked(true)}>🔒 ロックする</Btn>
+          </div>
+        </aside>
+
+        {/* メイン */}
+        <main className="flex-1 min-w-0">
+          {/* モバイルヘッダー */}
+          <div className="md:hidden sticky top-0 z-40 flex items-center gap-2.5 px-4 py-3 bg-night-900/90 border-b border-night-600/60" style={{ backdropFilter:'blur(10px)' }}>
+            <img src="assets/logo.jpg" alt="" className="w-8 h-8 rounded-lg object-cover border border-night-400/40" onError={e => { e.currentTarget.style.display='none'; }} />
+            <p className="flex-1 text-[13px] font-black text-cream-50">SLEEPY 管理コンソール</p>
+            <button onClick={() => setLocked(true)} className="btn-press text-[15px]" aria-label="ロック">🔒</button>
+          </div>
+          <div className="p-4 md:p-6 max-w-5xl pb-24 md:pb-8">{screen}</div>
+        </main>
+      </div>
+
+      {/* モバイル下部ナビ */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 px-3 pb-3">
+        <div className="bg-night-800/95 border border-night-500/60 rounded-2xl flex justify-around px-1 py-2" style={{ backdropFilter:'blur(12px)' }}>
+          {NAV.map(n => (
+            <button key={n.id} onClick={() => nav(n.id)} className="btn-press flex flex-col items-center gap-0.5 px-3 py-1">
+              <span className={`text-[17px] ${activeNav === n.id ? '' : 'grayscale opacity-60'}`}>{n.icon}</span>
+              <span className={`text-[9px] font-black ${activeNav === n.id ? 'text-moon-300' : 'text-night-300'}`}>{n.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </Ctx.Provider>
+  );
+}
+
+class ErrorBoundary extends React.Component {
+  constructor(p) { super(p); this.state = { err: null }; }
+  static getDerivedStateFromError(err) { return { err }; }
+  render() {
+    if (this.state.err) return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center">
+        <span className="text-[40px]">😴💦</span>
+        <p className="text-[14px] font-black text-cream-50 mt-3">エラーがおきました</p>
+        <p className="text-[10px] text-night-300 mt-2 break-all">{String(this.state.err)}</p>
+        <button className="mt-4 px-5 py-2.5 rounded-xl bg-cream-100 text-night-900 font-black text-[13px]" onClick={() => location.reload()}>再読み込み</button>
+      </div>
+    );
+    return this.props.children;
+  }
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<ErrorBoundary><App /></ErrorBoundary>);
+</script>
+</body>
+</html>
