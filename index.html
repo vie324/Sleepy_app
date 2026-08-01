@@ -1174,9 +1174,11 @@ function Soupy3DOrSvg(props) {
   }, []);
   if (use3d) {
     return (
-      <model-viewer src="assets/soupy.glb" autoplay camera-controls disable-zoom auto-rotate
+      <model-viewer
+        ref={el => { if (el && !el.__spErrHooked) { el.__spErrHooked = true; el.addEventListener('error', () => setUse3d(false)); } }}
+        src="assets/soupy.glb" autoplay camera-controls disable-zoom auto-rotate auto-rotate-delay="1500"
         interaction-prompt="none" shadow-intensity="1" exposure="1.05"
-        style={{ width: props.size, height: props.size * (270 / 260), display: 'inline-block' }} />
+        camera-orbit="0deg 82deg 105%" style={{ width: props.size, height: props.size * (270 / 260), display: 'inline-block' }} />
     );
   }
   return <ParallaxTilt max={6}><Soupy {...props} /></ParallaxTilt>;
