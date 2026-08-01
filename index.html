@@ -24,7 +24,7 @@
 <!-- Google Fonts（読めない環境ではシステムフォントに自動フォールバック） -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700;900&family=Noto+Sans+JP:wght@400;500;700;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700;900&family=Noto+Sans+JP:wght@400;500;700;800&family=Shippori+Mincho:wght@500;600&display=swap">
 
 <!-- ランタイムは vendor/ に同梱（オフラインでも動作）
      Tailwind CDN 3.4.16 / React 18 UMD / Babel Standalone 7.29.7 -->
@@ -80,6 +80,8 @@ tailwind.config = {
   @keyframes breath-guide { 0%,10% { transform:scale(.62); } 45%,55% { transform:scale(1); } 90%,100% { transform:scale(.62); } }
   @keyframes star-burst { 0% { opacity:1; transform:translate(0,0) scale(.4) rotate(0);} 100% { opacity:0; transform:translate(var(--tx), var(--ty)) scale(1) rotate(180deg);} }
   @keyframes spin-slow { to { transform:rotate(360deg);} }
+  @keyframes moon-rock { 0%,100% { transform:rotate(-1.8deg);} 50% { transform:rotate(1.8deg);} }
+  .brand-serif { font-family: "Shippori Mincho", "Hiragino Mincho ProN", "Yu Mincho", serif; }
 
   .anim-floaty { animation: floaty 3.4s ease-in-out infinite; }
   .anim-pop { animation: pop-in .35s cubic-bezier(.2,1.4,.4,1) both; }
@@ -413,6 +415,160 @@ const PRODUCTS = [
 ];
 const PRODUCT = Object.fromEntries(PRODUCTS.map(p => [p.id, p]));
 
+// サブスク・プラン（全体設計図 11「プラン・サブスク案内」）
+const SUB_PLANS = [
+  { id:'sub_light', emoji:'🌙', name:'整えライト会員', price:10800, cadence:'月1回', color:'#6d82ec',
+    perks:['睡眠整体 月1回','物販 5%OFF','LINE相談いつでも'],
+    desc:'まずは月1回のメンテナンスから。整えたからだをキープしたい方に。' },
+  { id:'sub_std', emoji:'✨', name:'整えスタンダード会員', price:19800, cadence:'月2回', color:'#eec25a', popular:true,
+    perks:['睡眠整体 月2回','物販 10%OFF','優先予約','毎回の姿勢分析レポート'],
+    desc:'2週間ごとの施術でからだが戻る前に整える、いちばん人気のプラン。' },
+  { id:'sub_care', emoji:'📦', name:'おうちケア定期便', price:2980, cadence:'毎月お届け', color:'#25a08c',
+    perks:['入浴剤＆ハーブティー毎月分','新商品の先行体験','ホームケア動画配信'],
+    desc:'ご自宅の睡眠環境づくりを毎月サポート。施術プランとの併用もおすすめ。' },
+];
+const SUB_PLAN = Object.fromEntries(SUB_PLANS.map(p => [p.id, p]));
+
+/* ---- 来店前AI簡易診断（LINE想定の5〜10問を アプリ内で実装） ---- */
+const QUICK_QS = [
+  { q:'布団に入ってから眠るまで、どれくらい？', cat:'mind', opts:['15分以内','15〜30分','30分以上'] },
+  { q:'夜中に目が覚めることは？', cat:'quality', opts:['ほぼない','週1〜2回','ほぼ毎日'] },
+  { q:'朝の目覚めは？', cat:'quality', opts:['スッキリ','ふつう','どんより'] },
+  { q:'日中の眠気は？', cat:'quality', opts:['ない','たまにある','よくある'] },
+  { q:'寝る直前までスマホを見ている？', cat:'rhythm', opts:['見ない','たまに','ほぼ毎日'] },
+  { q:'14時以降のカフェインは？', cat:'rhythm', opts:['とらない','たまに','ほぼ毎日'] },
+  { q:'肩こり・首こりは？', cat:'body', opts:['ない','たまに','慢性的にある'] },
+  { q:'休日の起床時刻は平日と比べて？', cat:'rhythm', opts:['ほぼ同じ','1〜2時間ずれる','2時間以上ずれる'] },
+];
+const QUICK_TYPES = {
+  mind:   { label:'おやすみスイッチ型', emoji:'💭', text:'脳の緊張がゆるまず、おやすみスイッチ（副交感神経）が入りにくいタイプ。首まわりの施術と呼吸法が効きます。' },
+  quality:{ label:'眠り浅め型', emoji:'🌙', text:'眠ってはいるものの深さが足りないタイプ。深部体温のリズムづくりと、からだの緊張オフがカギです。' },
+  rhythm: { label:'リズム乱れ型', emoji:'⏰', text:'体内時計が後ろにずれがちなタイプ。朝の光・カフェイン・スマホの3点を整えると大きく変わります。' },
+  body:   { label:'からだ緊張型', emoji:'💪', text:'こり・こわばりが眠りをじゃましているタイプ。施術との相性がいちばん良いタイプです。' },
+};
+function quickResult(answers) {
+  const pts = answers.reduce((a, v) => a + v, 0);
+  const score = clamp(Math.round(100 - pts / (QUICK_QS.length * 2) * 100), 0, 100);
+  const catPts = {};
+  answers.forEach((v, i) => { const c = QUICK_QS[i].cat; catPts[c] = (catPts[c] || 0) + v; });
+  const type = Object.keys(catPts).sort((a, b) => catPts[b] - catPts[a])[0] || 'quality';
+  return { score, type, ...QUICK_TYPES[type] };
+}
+
+/* ---- 本診断（30問・5カテゴリ / 全体設計図 2「来店・本診断」） ---- */
+const ASSESS_CATS = [
+  { id:'sleep',  name:'ねむりの状態', emoji:'🌙' },
+  { id:'rhythm', name:'生活リズム',   emoji:'⏰' },
+  { id:'stress', name:'こころ',       emoji:'💭' },
+  { id:'body',   name:'からだ',       emoji:'💪' },
+  { id:'env',    name:'環境・習慣',   emoji:'🛏️' },
+];
+// rev:true は「あてはまるほど良い」質問
+const ASSESS_QS = [
+  { cat:'sleep', q:'布団に入って30分以上眠れないことがある' },
+  { cat:'sleep', q:'夜中に2回以上目が覚める' },
+  { cat:'sleep', q:'起きたい時刻より早く目が覚めてしまう' },
+  { cat:'sleep', q:'睡眠時間が6時間未満の日がある' },
+  { cat:'sleep', q:'いびき・呼吸の乱れを指摘されたことがある' },
+  { cat:'sleep', q:'朝、疲れが残っている感じがする' },
+  { cat:'rhythm', q:'平日と休日で起きる時刻が2時間以上ずれる' },
+  { cat:'rhythm', q:'朝食をとらない日がある' },
+  { cat:'rhythm', q:'朝、太陽の光を浴びる習慣がある', rev:true },
+  { cat:'rhythm', q:'15時以降に30分以上の昼寝をする' },
+  { cat:'rhythm', q:'就寝時刻が日によってバラバラだ' },
+  { cat:'rhythm', q:'夜22時以降に食事をとることがある' },
+  { cat:'stress', q:'布団の中で考えごとをしてしまう' },
+  { cat:'stress', q:'日中、緊張しっぱなしだと感じる' },
+  { cat:'stress', q:'ささいなことでイライラする' },
+  { cat:'stress', q:'ため息がよく出る' },
+  { cat:'stress', q:'「何もしない時間」を罪悪感なく持てる', rev:true },
+  { cat:'stress', q:'心配ごとで眠れないことがある' },
+  { cat:'body', q:'肩こり・首こりが慢性的にある' },
+  { cat:'body', q:'腰の痛み・張りがある' },
+  { cat:'body', q:'手足が冷えて眠りにくいことがある' },
+  { cat:'body', q:'呼吸が浅いと感じることがある' },
+  { cat:'body', q:'歯ぎしり・食いしばりを指摘されたことがある' },
+  { cat:'body', q:'週2回以上、からだを動かす習慣がある', rev:true },
+  { cat:'env', q:'寝室に光（常夜灯・街灯・スマホ）が入る' },
+  { cat:'env', q:'音が気になって眠れないことがある' },
+  { cat:'env', q:'まくら・マットレスが合っていない気がする' },
+  { cat:'env', q:'布団の中でスマホを見る' },
+  { cat:'env', q:'14時以降にカフェインをとる' },
+  { cat:'env', q:'就寝前にお酒を飲む' },
+];
+const ASSESS_OPTS = ['あてはまらない', 'たまに', 'よくある', 'いつも'];
+const ASSESS_CAT_ADVICE = {
+  sleep:  { low:'眠りそのものにお疲れサインが出ています。「眠れるからだ」づくりを最優先に、施術＋深部体温リズムから整えましょう。', issues:['fallAsleep','wakeMid'] },
+  rhythm: { low:'体内時計が乱れぎみ。まずは「起きる時刻をそろえる」「朝の光」の2つから始めるのが近道です。', issues:['rhythm'] },
+  stress: { low:'こころの緊張（交感神経の高ぶり）が眠りをじゃましています。呼吸法とリラックス習慣で、ブレーキの練習を。', issues:['stress'] },
+  body:   { low:'からだのこわばり・こりが強め。ここは施術がいちばん得意な領域です。ストレッチとの二刀流で緩めましょう。', issues:['bodyTension'] },
+  env:    { low:'寝室環境と夜の習慣に改善ポイントあり。光・音・寝具・刺激物を1つずつ整えると効果的です。', issues:['env'] },
+};
+function assessResult(answers) {
+  const catPts = {}, catMax = {};
+  ASSESS_QS.forEach((qq, i) => {
+    let v = answers[i] ?? 0;
+    if (qq.rev) v = 3 - v;
+    catPts[qq.cat] = (catPts[qq.cat] || 0) + v;
+    catMax[qq.cat] = (catMax[qq.cat] || 0) + 3;
+  });
+  const cats = {};
+  ASSESS_CATS.forEach(c => { cats[c.id] = clamp(Math.round(100 - (catPts[c.id] / catMax[c.id]) * 100), 0, 100); });
+  const total = Math.round(avg(Object.values(cats)));
+  const sorted = [...ASSESS_CATS].sort((a, b) => cats[a.id] - cats[b.id]);
+  const worst = sorted.filter(c => cats[c.id] < 70).slice(0, 2).map(c => c.id);
+  const best = sorted[sorted.length - 1];
+  const level = total >= 80 ? { rank:'A', label:'とてもよく整っています' } : total >= 65 ? { rank:'B', label:'おおむね良好・のびしろあり' } : total >= 50 ? { rank:'C', label:'お疲れサインが出ています' } : { rank:'D', label:'しっかり整えたい状態です' };
+  return { total, cats, worst, bestId: best.id, level };
+}
+
+/* ---- 教育スライド（全体設計図 3「教育動画視聴」の代替コンテンツ） ---- */
+const SLIDES = [
+  { id:'d_why', emoji:'🌅', title:'なぜ「睡眠」で人生が変わるの？', mins:2,
+    pages:[
+      { h:'睡眠は「最強の自己投資」', t:'集中力・記憶力・感情の安定・肌や代謝。ぜんぶの土台が睡眠です。人生の1/3の質が、残り2/3の質を決めます。' },
+      { h:'眠れない本当の理由', t:'気合いや性格の問題ではありません。多くは「自律神経の切り替え」がうまくいっていないだけ。つまり、整えれば変わります。' },
+      { h:'アクセルとブレーキ', t:'日中はアクセル（交感神経）、夜はブレーキ（副交感神経）。現代の生活はアクセルを踏む要素だらけで、ブレーキの練習が必要なんです。' },
+      { h:'改善事例：Aさん(40代)', t:'寝つきに90分かかっていたAさん。週1回の施術＋夜のスマホ対策で、3週間後には15分で眠れるように。朝の頭痛も消えました。' },
+      { h:'改善事例：Bさん(30代)', t:'夜中に3回起きていたBさん。首まわりの施術と入浴習慣で中途覚醒が0〜1回に。「日中の眠気がなくなった」と驚かれています。' },
+      { h:'今日からの一歩', t:'このアプリで「記録→気づき→ケア」のサイクルを回しましょう。スーピーくんがずっと伴走します🐑' },
+    ] },
+  { id:'d_ans', emoji:'⚖️', title:'自律神経と施術のしくみ', mins:2,
+    pages:[
+      { h:'自律神経ってどこにある？', t:'脳から背骨に沿って全身へ。首・背中・骨盤まわりは、自律神経の大切な通り道です。' },
+      { h:'こりが眠りを妨げるワケ', t:'首や背中の筋肉がこわばると、通り道が圧迫されて切り替えが下手に。「布団に入っても頭が冴える」の正体です。' },
+      { h:'施術ですること', t:'SLEEPYの施術は、リラクゼーションではなく「眠れるからだ」への根本アプローチ。緊張をゆるめ、呼吸が深く入る状態をつくります。' },
+      { h:'施術後のゴールデンタイム', t:'施術でゆるんだ状態は、およそ2〜3週間かけて少しずつ戻ります。この間のホームケアが定着のカギ。' },
+      { h:'だから「前後比較」', t:'姿勢分析のBefore/Afterで変化を見える化。からだで感じて、数字で確認。これがモチベーションになります。' },
+      { h:'つづきはサロンで', t:'あなたのからだの状態は、カウンセリングと施術でくわしくお伝えします。気になることは何でも聞いてくださいね。' },
+    ] },
+  { id:'d_home', emoji:'🏠', title:'ホームケアが9割', mins:2,
+    pages:[
+      { h:'1ヶ月=720時間', t:'施術は月に1〜2時間。残りの718時間をどう過ごすかで、結果は大きく変わります。' },
+      { h:'がんばらないのがコツ', t:'完璧を目指すと続きません。「処方された1〜3個だけ」をゆるく続けるのがいちばん効果的です。' },
+      { h:'夜のゴールデン習慣', t:'①湯船（就寝90分前）②スマホは寝室の外 ③4-7-8呼吸。この3つだけで眠りは変わります。' },
+      { h:'朝のゴールデン習慣', t:'起きたらカーテンを開けて光を浴びる。夜の眠気は、朝の光が予約しています。' },
+      { h:'アプリの使いかた', t:'毎晩の睡眠記録＋処方ストレッチでスーピーくんが育ちます。育てるついでに、あなたも整う設計です🐑' },
+      { h:'こまったら', t:'眠れない夜が続いたら、がまんせずサロンへ。データを見ながら一緒に作戦を立てましょう。' },
+    ] },
+];
+
+/* ---- おやすみサウンド（周波数・全体設計図 13「周波数で毎日の質を向上」） ---- */
+const SOUND_PRESETS = [
+  { id:'528', emoji:'🎵', name:'ねむりの周波数 528Hz', desc:'ゆらぎのある528Hzの純音。読書やストレッチのおともに。', tag:'リラックス' },
+  { id:'theta', emoji:'🌊', name:'シータ波リラックス', desc:'左右で4Hzずれた音がシータ波（深いリラックス状態）へ誘導。イヤホン推奨。', tag:'入眠前' },
+  { id:'rain', emoji:'🌧️', name:'よるの雨音', desc:'やわらかな雨の音で思考の声をマスキング。考えごとで眠れない夜に。', tag:'考えごと対策' },
+];
+
+/* ---- 企業理念（MVV） ---- */
+const MVV = {
+  message: '睡眠から、人生を変える。',
+  purpose: { name:'PURPOSE｜存在意義', text:'一人ひとりが、自分らしく生きられる社会をつくる。心と身体が整うことで、人は本来の自分を取り戻し、自分らしい人生を選択できる。' },
+  mission: { name:'MISSION｜使命', text:'睡眠と自律神経ケアを、誰もが受けられる新しい文化にする。不調が起きてから対処するのではなく、日常の中で自分自身を整える。' },
+  vision:  { name:'VISION｜目指す未来', text:'日本で最も、人の「整う力」を支えるウェルネスブランドへ。' },
+  values: ['革新的な価値創造に挑戦し続ける','期待を超える感動体験を届ける','仕組みで再現性をつくる','共に成長し、共に豊かになる','予防に価値を置く'],
+};
+
 /* ============================================================
    SECTION 2: 睡眠スコア・自律神経・レベル計算
    ============================================================ */
@@ -537,6 +693,21 @@ function analyzeIssues(state) {
     const days = Math.round((new Date(todayStr()) - new Date(last)) / 86400000);
     if (days >= 21) push('visitStale', `前回のご来店から${days}日`, 'からだのメンテナンス時期です', 3);
   }
+
+  // 本診断の結果からも課題を追加
+  const assess = (state.assessments || [])[Math.max(0, (state.assessments || []).length - 1)];
+  if (assess) {
+    (assess.worst || []).forEach(catId => {
+      const adv = ASSESS_CAT_ADVICE[catId];
+      const cat = ASSESS_CATS.find(c => c.id === catId);
+      if (!adv || !cat) return;
+      adv.issues.forEach(issueId => {
+        if (!issues.some(i => i.id === issueId)) {
+          push(issueId, `本診断：「${cat.name}」が弱点`, `カテゴリスコア ${assess.cats[catId]}点`, 3);
+        }
+      });
+    });
+  }
   return issues.sort((a, b) => b.weight - a.weight);
 }
 
@@ -572,6 +743,12 @@ const RECIPES = {
     msg:'整えたからだも3週間で少しずつ元に戻ります。そろそろメンテナンスへ！' },
   coldFeet: { stretch:['s_calf'], product:['p_bath'], article:['a_bath'], msg:'足先の血流を助けて放熱できるからだに。' },
   morning: { stretch:['s_morning'], product:['p_mask'], article:['a_sun'], msg:'朝のリズムづくりから夜の眠りを整えましょう。' },
+  rhythm: { stretch:['s_morning'], product:['p_tea'], article:['a_sun','a_weekend'],
+    msg:'体内時計のずれが眠りを乱しています。起床時刻をそろえて朝の光を浴びるところから。' },
+  bodyTension: { stretch:['s_neck_side','s_scapula'], product:['p_pole','p_bath'], article:['a_posture'],
+    msg:'からだのこわばりが強め。ここは施術の得意分野です。ストレッチとの二刀流でゆるめましょう。' },
+  env: { stretch:[], product:['p_mask','p_pillow','p_glasses'], article:['a_phone'],
+    msg:'寝室の光・音・寝具を1つずつ整えると、努力なしで眠りが深くなります。' },
   noLog: { stretch:['s_478'], product:[], article:['a_ans'],
     msg:'まずは今夜から睡眠記録を！スーピーくんがあなた専用のアドバイスを作ります。' },
 };
@@ -612,8 +789,13 @@ function defaultState() {
     quizDone: {},
     orders: [],
     cart: [],
-    visitFlow: null,        // {step, startedAt, beforeId, afterId, prescribed[], recommended[]}
+    visitFlow: null,        // {step, startedAt, beforeId, afterId, prescribed[], goalNote, feelBefore, feelAfter}
     xpLog: [],
+    quickChecks: [],        // 来店前AI簡易診断の履歴
+    assessments: [],        // 本診断(30問)の履歴
+    slidesDone: [],         // 視聴済み教育スライド
+    subscription: null,     // {planId, since}
+    prescription: null,     // {items:[{kind,id}], date, until} 本日のホームケア処方(1〜3点)
   };
 }
 
@@ -626,7 +808,10 @@ function gainXp(st, amount, reason) {
 function loadState() {
   try {
     const raw = localStorage.getItem(STORE_KEY);
-    if (raw) { const st = JSON.parse(raw); if (st && st.version === 1) return st; }
+    if (raw) {
+      const st = JSON.parse(raw);
+      if (st && st.version === 1) return { ...defaultState(), ...st }; // 新フィールドを補完
+    }
   } catch (e) { console.warn('loadState failed', e); }
   return defaultState();
 }
@@ -711,6 +896,13 @@ function seedDemoState(name, goal) {
   ];
   st.learnRead = ['a_ans', 'a_sun'];
   st.quizDone = { a_ans: true };
+
+  // 診断のデモ結果
+  st.quickChecks = [{ id: uid(), date: addDays(today, -34), answers: [2,1,2,1,2,1,2,1], ...quickResult([2,1,2,1,2,1,2,1]) }];
+  const asAns = [2,1,1,1,0,2, 1,1,1,0,2,1, 2,2,1,2,1,1, 3,1,1,2,0,1, 1,0,2,2,1,0];
+  st.assessments = [{ id: uid(), date: addDays(today, -30), answers: asAns, ...assessResult(asAns) }];
+  st.slidesDone = ['d_why'];
+
   gainXp(st, 430, 'これまでの活動');
   return st;
 }
@@ -721,14 +913,39 @@ function seedDemoState(name, goal) {
    ひとつながりのアウトラインとして表現している。
    ============================================================ */
 
-// 羊毛のもこもこ円 [cx, cy, r]
-const WOOL_HEAD = [ [120,64,30],[91,72,24],[149,72,24],[73,90,19],[167,90,19],[78,110,15],[162,110,15] ];
-const WOOL_BANG = [ [98,82,16],[120,78,18],[142,82,16] ];
+// 羊毛のもこもこ円 [cx, cy, r]（ブランドビジュアル準拠：毛布を抱いて三日月にすわる）
+const WOOL_HEAD = [ [130,62,33],[99,70,26],[161,70,26],[81,90,21],[179,90,21],[87,112,16],[173,112,16],[130,52,24] ];
+const WOOL_BANG = [ [105,82,17],[130,76,19],[155,82,17] ];
 const WOOL_BODY = [
-  [120,170,62],[78,150,33],[162,150,33],[66,182,28],[174,182,28],
-  [88,208,28],[152,208,28],[120,214,30],[100,132,26],[140,132,26],
+  [130,178,56],[88,164,31],[172,164,31],[76,192,25],[184,192,25],[130,198,46],[104,150,26],[156,150,26],
 ];
-const EARS = [ { cx:64, cy:104, rot:-24 }, { cx:176, cy:104, rot:24 } ];
+const EARS = [ { cx:76, cy:112, rot:14 }, { cx:184, cy:112, rot:-14 } ];
+
+// ふんわり立体感を出すグラデーション定義（全インスタンス共通ID）
+function SoupyDefs() {
+  return (
+    <defs>
+      <radialGradient id="spWool" gradientUnits="userSpaceOnUse" cx="104" cy="62" r="205">
+        <stop offset="0%" stopColor="#fffdf6" /><stop offset="52%" stopColor="#faf3e3" /><stop offset="100%" stopColor="#e6d9ba" />
+      </radialGradient>
+      <radialGradient id="spFace" gradientUnits="userSpaceOnUse" cx="118" cy="96" r="86">
+        <stop offset="0%" stopColor="#fbe9cd" /><stop offset="100%" stopColor="#efd0a4" />
+      </radialGradient>
+      <linearGradient id="spBlanket" x1="0" y1="0" x2="0.25" y2="1">
+        <stop offset="0%" stopColor="#33436f" /><stop offset="55%" stopColor="#222e4c" /><stop offset="100%" stopColor="#18203a" />
+      </linearGradient>
+      <linearGradient id="spBlanketPink" x1="0" y1="0" x2="0.25" y2="1">
+        <stop offset="0%" stopColor="#f6c9d2" /><stop offset="100%" stopColor="#e79aad" />
+      </linearGradient>
+      <linearGradient id="spMoon" x1="0" y1="0" x2="0.6" y2="1">
+        <stop offset="0%" stopColor="#f9e6a8" /><stop offset="60%" stopColor="#eec25a" /><stop offset="100%" stopColor="#d9a53e" />
+      </linearGradient>
+      <radialGradient id="spGlow" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stopColor="rgba(246,217,126,.42)" /><stop offset="70%" stopColor="rgba(246,217,126,.10)" /><stop offset="100%" stopColor="rgba(246,217,126,0)" />
+      </radialGradient>
+    </defs>
+  );
+}
 
 function WoolCircles({ list, fill, extra = 0 }) {
   return <g>{list.map(([x, y, r], i) => <circle key={i} cx={x} cy={y} r={r + extra} fill={fill} />)}</g>;
@@ -738,26 +955,28 @@ function SoupyEyes({ mood }) {
   if (mood === 'happy' || mood === 'excited') {
     return (
       <g>
-        <circle cx={102} cy={112} r={5} fill={C.chocoDark} />
-        <circle cx={138} cy={112} r={5} fill={C.chocoDark} />
-        <circle cx={104} cy={110} r={1.8} fill="#fff" />
-        <circle cx={140} cy={110} r={1.8} fill="#fff" />
+        <circle cx={110} cy={117} r={5.2} fill={C.chocoDark} />
+        <circle cx={150} cy={117} r={5.2} fill={C.chocoDark} />
+        <circle cx={112} cy={115} r={1.9} fill="#fff" />
+        <circle cx={152} cy={115} r={1.9} fill="#fff" />
       </g>
     );
   }
   if (mood === 'tired') {
     return (
       <g fill="none" stroke={C.chocoDark} strokeWidth={4} strokeLinecap="round">
-        <path d="M94 114 q8 -4 16 0" />
-        <path d="M130 114 q8 -4 16 0" />
+        <path d="M101 119 q9 -4 18 0" />
+        <path d="M141 119 q9 -4 18 0" />
       </g>
     );
   }
-  // sleep（ロゴと同じ、穏やかな閉じ目）
+  // sleep（ブランドビジュアルと同じ、まつ毛つきの穏やかな閉じ目）
   return (
     <g fill="none" stroke={C.chocoDark} strokeWidth={4} strokeLinecap="round">
-      <path d="M94 111 q8 7 16 0" />
-      <path d="M130 111 q8 7 16 0" />
+      <path d="M101 116 q9 7 18 0" />
+      <path d="M141 116 q9 7 18 0" />
+      <path d="M101 116 l-4.5 -3" strokeWidth={3.2} />
+      <path d="M159 116 l4.5 -3" strokeWidth={3.2} />
     </g>
   );
 }
@@ -765,129 +984,140 @@ function SoupyEyes({ mood }) {
 function SoupyAccessory({ id }) {
   if (id === 'nightcap') return (
     <g>
-      <path d="M88 56 Q84 26 62 18 Q78 44 92 66 Z" fill="#93a7ee" stroke={C.choco} strokeWidth={4} strokeLinejoin="round" />
-      <circle cx={60} cy={17} r={7} fill={C.cream} stroke={C.choco} strokeWidth={3.5} />
+      <path d="M98 52 Q92 22 68 12 Q86 42 102 62 Z" fill="#93a7ee" stroke={C.choco} strokeWidth={4} strokeLinejoin="round" />
+      <circle cx={66} cy={12} r={7} fill={C.cream} stroke={C.choco} strokeWidth={3.5} />
     </g>
   );
   if (id === 'star') return (
     <g className="anim-floaty" style={{ animationDelay: '-1.2s' }}>
-      <path d="M206 84 l4.2 8.6 9.4 1.3 -6.8 6.7 1.6 9.4 -8.4 -4.4 -8.4 4.4 1.6 -9.4 -6.8 -6.7 9.4 -1.3 Z"
+      <path d="M222 92 l4.2 8.6 9.4 1.3 -6.8 6.7 1.6 9.4 -8.4 -4.4 -8.4 4.4 1.6 -9.4 -6.8 -6.7 9.4 -1.3 Z"
         fill={C.moon} stroke={C.choco} strokeWidth={3} strokeLinejoin="round" />
-      <circle cx={204} cy={93} r={1.6} fill={C.chocoDark} />
-      <circle cx={210} cy={93} r={1.6} fill={C.chocoDark} />
+      <circle cx={220} cy={101} r={1.6} fill={C.chocoDark} />
+      <circle cx={226} cy={101} r={1.6} fill={C.chocoDark} />
     </g>
   );
   if (id === 'crown') return (
     <g>
-      <path d="M92 46 l6 -14 8 9 8 -13 8 13 8 -9 6 14 Z" transform="translate(-14,-4)" fill={C.moon} stroke={C.choco} strokeWidth={3.5} strokeLinejoin="round" />
+      <path d="M108 40 l6 -15 9 10 7 -14 7 14 9 -10 6 15 Z" fill={C.moon} stroke={C.choco} strokeWidth={3.5} strokeLinejoin="round" />
     </g>
   );
-  if (id === 'blanket') return (
-    <g>
-      <path d="M62 186 Q120 172 178 186 L178 224 Q168 234 158 226 Q148 236 138 227 Q128 237 120 228 Q110 237 100 227 Q90 236 80 226 Q70 234 62 224 Z"
-        fill="#f2b9c4" stroke={C.choco} strokeWidth={4} strokeLinejoin="round" opacity={0.96} />
-      <circle cx={95} cy={205} r={4} fill="#fff" opacity={.55} />
-      <circle cx={125} cy={210} r={4} fill="#fff" opacity={.55} />
-      <circle cx={152} cy={204} r={4} fill="#fff" opacity={.55} />
-    </g>
-  );
+  if (id === 'blanket') return null; // 毛布の色替えは本体側で描画
   if (id === 'pillow') return (
     <g>
-      <rect x={58} y={224} width={124} height={26} rx={13} fill="#aab8e8" stroke={C.choco} strokeWidth={4} />
-      <path d="M70 237 q50 8 100 0" stroke="#8194d6" strokeWidth={3} fill="none" strokeLinecap="round" />
+      <rect x={64} y={238} width={132} height={26} rx={13} fill="#aab8e8" stroke={C.choco} strokeWidth={4} />
+      <path d="M78 251 q52 8 104 0" stroke="#8194d6" strokeWidth={3} fill="none" strokeLinecap="round" />
     </g>
   );
   if (id === 'lamp') return (
     <g>
-      <rect x={210} y={140} width={6} height={92} rx={3} fill={C.hoofDark} stroke={C.choco} strokeWidth={3} />
-      <path d="M228 112 a20 20 0 1 0 -10 26 a16 16 0 1 1 10 -26 Z" fill={C.moon} stroke={C.choco} strokeWidth={3.5} style={{ animation: 'moon-pulse 3s ease-in-out infinite' }} />
-      <rect x={200} y={228} width={26} height={8} rx={4} fill={C.hoofDark} stroke={C.choco} strokeWidth={3} />
+      <rect x={228} y={150} width={6} height={96} rx={3} fill={C.hoofDark} stroke={C.choco} strokeWidth={3} />
+      <path d="M246 122 a20 20 0 1 0 -10 26 a16 16 0 1 1 10 -26 Z" fill="url(#spMoon)" stroke={C.choco} strokeWidth={3.5} style={{ animation: 'moon-pulse 3s ease-in-out infinite' }} />
+      <rect x={218} y={242} width={26} height={8} rx={4} fill={C.hoofDark} stroke={C.choco} strokeWidth={3} />
     </g>
   );
   return null;
 }
 
-function Soupy({ size = 220, mood = 'sleep', wearing = [], animate = true, showZzz, onTap, className = '', title }) {
+function Soupy({ size = 220, mood = 'sleep', wearing = [], animate = true, showZzz, onTap, className = '', title, scene }) {
   const [bounce, setBounce] = useState(0);
   const [hearts, setHearts] = useState([]);
   const zzz = showZzz !== undefined ? showZzz : mood === 'sleep';
+  const pink = wearing.includes('blanket');
 
   const handleTap = () => {
     setBounce(b => b + 1);
     const id = uid();
-    setHearts(hs => [...hs, { id, x: 150 + Math.random() * 40, y: 70 + Math.random() * 20 }]);
+    setHearts(hs => [...hs, { id, x: 160 + Math.random() * 40, y: 76 + Math.random() * 20 }]);
     setTimeout(() => setHearts(hs => hs.filter(h => h.id !== id)), 1300);
     if (onTap) onTap();
   };
 
   return (
     <div className={`relative inline-block select-none ${animate ? 'anim-floaty' : ''} ${className}`}
-      style={{ width: size, height: size * (250 / 240) }}
+      style={{ width: size, height: size * (270 / 260) }}
       onClick={handleTap} role={onTap ? 'button' : undefined} aria-label={title || 'スーピーくん'}>
-      <svg key={bounce} viewBox="0 0 240 250" width="100%" height="100%"
+      <svg key={bounce} viewBox="0 0 260 270" width="100%" height="100%"
         className={bounce ? 'soupy-tap-bounce' : ''} style={{ overflow: 'visible', display: 'block' }}>
+        <SoupyDefs />
+
+        {/* ---- 三日月のゆりかご（ブランドビジュアルのシーン） ---- */}
+        {scene === 'moon' && (
+          <g style={animate ? { animation: 'moon-rock 7s ease-in-out infinite', transformBox: 'fill-box', transformOrigin: '50% 80%' } : null}>
+            <ellipse cx={138} cy={168} rx={126} ry={116} fill="url(#spGlow)" />
+            <g transform="rotate(-16 130 160)">
+              <path d="M214 60 A101 101 0 1 0 54 198 A123 123 0 0 1 214 60 Z" fill="url(#spMoon)" />
+              <path d="M206 74 A88 88 0 1 0 66 194" fill="none" stroke="rgba(150,100,40,.30)" strokeWidth={7} strokeLinecap="round" />
+            </g>
+            <circle cx={92} cy={244} r={3.2} fill="#fff6d9" opacity={.7} />
+            <circle cx={158} cy={254} r={2.4} fill="#fff6d9" opacity={.6} />
+            <circle cx={216} cy={170} r={2.8} fill="#fff6d9" opacity={.65} />
+          </g>
+        )}
 
         {/* ---- もこもこ輪郭（背面の茶色シルエット） ---- */}
         <g>
           <WoolCircles list={WOOL_BODY} fill={C.choco} extra={5} />
           <WoolCircles list={WOOL_HEAD} fill={C.choco} extra={5} />
           {EARS.map((e, i) => (
-            <ellipse key={i} cx={e.cx} cy={e.cy} rx={19} ry={12} fill={C.choco} transform={`rotate(${e.rot} ${e.cx} ${e.cy})`} />
+            <ellipse key={i} cx={e.cx} cy={e.cy} rx={24} ry={14} fill={C.choco} transform={`rotate(${e.rot} ${e.cx} ${e.cy})`} />
           ))}
           <WoolCircles list={WOOL_BANG} fill={C.choco} extra={4.5} />
         </g>
 
-        {/* ---- 耳 ---- */}
-        {EARS.map((e, i) => (
-          <g key={i} transform={`rotate(${e.rot} ${e.cx} ${e.cy})`}>
-            <ellipse cx={e.cx} cy={e.cy} rx={15} ry={8.5} fill={C.face} />
-            <ellipse cx={e.cx + (i === 0 ? -2 : 2)} cy={e.cy} rx={8} ry={4.5} fill={C.cheek} opacity={.65} />
-          </g>
-        ))}
-
         {/* ---- からだ（呼吸アニメーション） ---- */}
         <g style={animate ? { animation: 'breathe 3.4s ease-in-out infinite', transformBox: 'fill-box', transformOrigin: '50% 90%' } : null}>
-          <WoolCircles list={WOOL_BODY} fill={C.wool} />
-          {/* おなかの陰影 */}
-          <ellipse cx={120} cy={176} rx={44} ry={34} fill={C.woolShade} opacity={.55} />
-          <ellipse cx={120} cy={172} rx={40} ry={30} fill={C.wool} />
+          <WoolCircles list={WOOL_BODY} fill="url(#spWool)" />
         </g>
 
-        {/* ---- あし ---- */}
-        <ellipse cx={84} cy={222} rx={21} ry={13} fill={C.hoofDark} stroke={C.choco} strokeWidth={4.5} />
-        <ellipse cx={156} cy={222} rx={21} ry={13} fill={C.hoofDark} stroke={C.choco} strokeWidth={4.5} />
-
-        {/* ---- まえあし（おなかの上で休む） ---- */}
+        {/* ---- 抱いている毛布（ネイビー×金の三日月 = ブランドの象徴） ---- */}
         <g>
-          <ellipse cx={99} cy={172} rx={17} ry={11} fill={C.hoof} stroke={C.choco} strokeWidth={4.5} transform="rotate(24 99 172)" />
-          <ellipse cx={141} cy={172} rx={17} ry={11} fill={C.hoof} stroke={C.choco} strokeWidth={4.5} transform="rotate(-24 141 172)" />
-          <path d="M108 178 l6 4 M132 178 l-6 4" stroke={C.choco} strokeWidth={3.5} strokeLinecap="round" fill="none" />
+          <path d="M86 152 Q130 166 174 152 Q198 170 194 202 Q188 234 130 238 Q72 234 66 202 Q62 170 86 152 Z"
+            fill={pink ? 'url(#spBlanketPink)' : 'url(#spBlanket)'} stroke="#10192e" strokeWidth={4} strokeLinejoin="round" />
+          <path d="M86 152 Q130 166 174 152" fill="none" stroke={pink ? '#fdeef2' : '#d9b45c'} strokeWidth={3.5} strokeLinecap="round" />
+          <path d="M97 176 Q122 188 118 218" fill="none" stroke="rgba(255,255,255,.09)" strokeWidth={5} strokeLinecap="round" />
+          <path d="M163 174 Q148 192 152 216" fill="none" stroke="rgba(255,255,255,.09)" strokeWidth={5} strokeLinecap="round" />
+          {pink ? (
+            <g fill="#fff" opacity={.75}>
+              <text x={118} y={206} fontSize={15}>♡</text>
+              <text x={142} y={192} fontSize={11}>♡</text>
+            </g>
+          ) : (
+            <path d="M138 184 a13 13 0 1 0 7 17 a10 10 0 1 1 -7 -17 Z" fill="url(#spMoon)" transform="rotate(-14 138 194)" />
+          )}
+        </g>
+
+        {/* ---- まえあし（毛布をぎゅっと抱く） ---- */}
+        <g>
+          <ellipse cx={106} cy={151} rx={16} ry={10.5} fill={C.hoof} stroke={C.choco} strokeWidth={4.5} transform="rotate(20 106 151)" />
+          <ellipse cx={154} cy={151} rx={16} ry={10.5} fill={C.hoof} stroke={C.choco} strokeWidth={4.5} transform="rotate(-20 154 151)" />
+          <path d="M114 157 l6 3.5 M146 157 l-6 3.5" stroke={C.choco} strokeWidth={3.4} strokeLinecap="round" fill="none" />
         </g>
 
         {/* ---- 顔 ---- */}
-        <ellipse cx={120} cy={104} rx={35} ry={31} fill={C.face} />
+        <ellipse cx={130} cy={112} rx={32} ry={28} fill="url(#spFace)" />
         {/* まえがみ（スカラップ） */}
         <g>
-          {WOOL_BANG.map(([x, y, r], i) => <circle key={i} cx={x} cy={y} r={r} fill={C.wool} stroke={C.choco} strokeWidth={4} />)}
+          {WOOL_BANG.map(([x, y, r], i) => <circle key={i} cx={x} cy={y} r={r} fill="url(#spWool)" stroke={C.choco} strokeWidth={4} />)}
         </g>
-        {/* あたまの羊毛（まえがみ上部のフチを覆う） */}
-        <WoolCircles list={WOOL_HEAD} fill={C.wool} />
+        {/* あたまの羊毛 */}
+        <WoolCircles list={WOOL_HEAD} fill="url(#spWool)" />
 
-        {/* ---- 三日月（ひたいの上・ロゴのシンボル） ---- */}
-        <g style={{ animation: animate ? 'moon-pulse 3.2s ease-in-out infinite' : 'none' }}>
-          <path d="M141 44 a15.5 15.5 0 1 0 8 20 a12 12 0 1 1 -8 -20 Z"
-            fill={C.moon} stroke={C.choco} strokeWidth={4} strokeLinejoin="round" transform="rotate(14 138 56)" />
-        </g>
+        {/* ---- 耳（羊毛の上に見えるたれ耳） ---- */}
+        {EARS.map((e, i) => (
+          <g key={i} transform={`rotate(${i === 0 ? 18 : -18} ${e.cx} ${e.cy})`}>
+            <ellipse cx={e.cx} cy={e.cy + 6} rx={19} ry={10} fill="url(#spFace)" stroke={C.choco} strokeWidth={4} />
+            <ellipse cx={e.cx + (i === 0 ? -4 : 4)} cy={e.cy + 7} rx={9.5} ry={4.8} fill={C.cheek} opacity={.5} />
+          </g>
+        ))}
 
         {/* ---- 表情 ---- */}
         <SoupyEyes mood={mood} />
-        <ellipse cx={91} cy={121} rx={8.5} ry={6} fill={C.cheek} opacity={.9} />
-        <ellipse cx={149} cy={121} rx={8.5} ry={6} fill={C.cheek} opacity={.9} />
-        <ellipse cx={120} cy={119} rx={3.4} ry={2.6} fill={C.chocoDark} />
-        <path d="M120 121 l0 5" stroke={C.chocoDark} strokeWidth={2.6} strokeLinecap="round" />
+        <ellipse cx={99} cy={127} rx={8.5} ry={5.8} fill={C.cheek} opacity={.85} />
+        <ellipse cx={161} cy={127} rx={8.5} ry={5.8} fill={C.cheek} opacity={.85} />
+        <ellipse cx={130} cy={124} rx={3.4} ry={2.5} fill={C.chocoDark} />
         {mood === 'excited'
-          ? <path d="M112 126 q8 9 16 0 z" fill="#a2664a" stroke={C.chocoDark} strokeWidth={3} strokeLinejoin="round" />
-          : <path d="M111 126 q4.5 5 9 0 M120 126 q4.5 5 9 0" stroke={C.chocoDark} strokeWidth={3.2} strokeLinecap="round" fill="none" />}
+          ? <path d="M122 130 q8 9 16 0 z" fill="#a2664a" stroke={C.chocoDark} strokeWidth={3} strokeLinejoin="round" />
+          : <path d="M123 130 q7 5.5 14 0" stroke={C.chocoDark} strokeWidth={3.2} strokeLinecap="round" fill="none" />}
 
         {/* ---- きせかえ ---- */}
         {wearing.map(id => <SoupyAccessory key={id} id={id} />)}
@@ -895,9 +1125,9 @@ function Soupy({ size = 220, mood = 'sleep', wearing = [], animate = true, showZ
         {/* ---- Zzz ---- */}
         {zzz && (
           <g fontFamily='"Zen Maru Gothic", sans-serif' fontWeight="900" fill={C.moon} stroke={C.choco} strokeWidth={1}>
-            <text x={176} y={64} fontSize={17} style={{ animation: 'zzz-rise 2.6s ease-in-out infinite' }}>z</text>
-            <text x={188} y={52} fontSize={22} style={{ animation: 'zzz-rise 2.6s ease-in-out .8s infinite' }}>Z</text>
-            <text x={202} y={40} fontSize={27} style={{ animation: 'zzz-rise 2.6s ease-in-out 1.6s infinite' }}>Z</text>
+            <text x={192} y={70} fontSize={17} style={{ animation: 'zzz-rise 2.6s ease-in-out infinite' }}>z</text>
+            <text x={204} y={58} fontSize={22} style={{ animation: 'zzz-rise 2.6s ease-in-out .8s infinite' }}>Z</text>
+            <text x={218} y={46} fontSize={27} style={{ animation: 'zzz-rise 2.6s ease-in-out 1.6s infinite' }}>Z</text>
           </g>
         )}
 
@@ -908,6 +1138,50 @@ function Soupy({ size = 220, mood = 'sleep', wearing = [], animate = true, showZ
       </svg>
     </div>
   );
+}
+
+/* ポインタに追従する擬似3Dチルト（ヒーロー表示用） */
+function ParallaxTilt({ children, max = 7, className = '' }) {
+  const [t, setT] = useState({ x: 0, y: 0 });
+  return (
+    <div className={className} style={{ perspective: 700, display: 'inline-block' }}
+      onPointerMove={e => {
+        const r = e.currentTarget.getBoundingClientRect();
+        setT({ x: ((e.clientX - r.left) / r.width) * 2 - 1, y: ((e.clientY - r.top) / r.height) * 2 - 1 });
+      }}
+      onPointerLeave={() => setT({ x: 0, y: 0 })}>
+      <div style={{ transform: `rotateY(${(t.x * max).toFixed(2)}deg) rotateX(${(-t.y * max).toFixed(2)}deg)`, transition: 'transform .18s ease-out', transformStyle: 'preserve-3d' }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/* 3Dモデル差し替えフック:
+   http(s)配信時に assets/soupy.glb が存在すれば <model-viewer> で3D表示。
+   なければ（file://含む）SVGスーピーくん + 視差チルトに自動フォールバック。 */
+function Soupy3DOrSvg(props) {
+  const [use3d, setUse3d] = useState(false);
+  useEffect(() => {
+    if (location.protocol === 'file:') return;
+    fetch('assets/soupy.glb', { method: 'HEAD' }).then(r => {
+      if (!r.ok) return;
+      const s = document.createElement('script');
+      s.type = 'module'; s.src = 'vendor/model-viewer.min.js';
+      s.onload = () => setUse3d(true);
+      document.head.appendChild(s);
+    }).catch(() => {});
+  }, []);
+  if (use3d) {
+    return (
+      <model-viewer
+        ref={el => { if (el && !el.__spErrHooked) { el.__spErrHooked = true; el.addEventListener('error', () => setUse3d(false)); } }}
+        src="assets/soupy.glb" autoplay camera-controls disable-zoom auto-rotate auto-rotate-delay="1500"
+        interaction-prompt="none" shadow-intensity="1" exposure="1.05"
+        camera-orbit="0deg 82deg 105%" style={{ width: props.size, height: props.size * (270 / 260), display: 'inline-block' }} />
+    );
+  }
+  return <ParallaxTilt max={6}><Soupy {...props} /></ParallaxTilt>;
 }
 
 // 夜空の背景（星がまたたく）
@@ -1300,7 +1574,7 @@ function HomeScreen() {
             <SpeechBubble text={bubble} />
           </div>
           <div className="flex items-end justify-center pb-1 pt-1">
-            <Soupy size={190} mood={mood} wearing={state.soupy.wearing} onTap={pet} title="スーピーくんをなでる" />
+            <Soupy3DOrSvg size={196} mood={mood} wearing={state.soupy.wearing} onTap={pet} scene="moon" title="スーピーくんをなでる" />
           </div>
           <div className="flex items-center justify-center gap-2 pb-3">
             <span className="text-[10.5px] font-black px-2.5 py-1 rounded-full bg-night-900/60 text-moon-300 border border-moon-400/30">Lv.{lv} {stageTitle(lv)}</span>
@@ -1343,6 +1617,42 @@ function HomeScreen() {
         </button>
       </div>
 
+      {/* いまのホームケア処方（来店時に1〜3点処方） */}
+      {state.prescription && state.prescription.until >= t && (
+        <div className="px-4 mt-3">
+          <div className="card p-3.5">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[12px] font-black text-cream-50">💊 いまのホームケア処方</p>
+              <span className="text-[9.5px] text-night-300 font-bold">{fmtMD(state.prescription.until)}まで</span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {state.prescription.items.map(id => {
+                const s = STRETCH[id], p = PRODUCT[id];
+                return (
+                  <Chip key={id} onClick={() => s ? nav('stretchPlay', { id }) : nav('product', { id })}>
+                    {s ? `${s.emoji} ${s.name}` : p ? `${p.emoji} ${p.name}` : id}
+                  </Chip>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 診断CTA（未診断の方向け） */}
+      {!state.quickChecks.length && !state.assessments.length && (
+        <div className="px-4 mt-3">
+          <button onClick={() => nav('quick')} className="btn-press w-full card p-3.5 flex items-center gap-3 text-left">
+            <span className="text-xl">📋</span>
+            <span className="flex-1">
+              <span className="block text-[13px] font-black text-cream-50">3分でわかる、ねむりの現在地</span>
+              <span className="block text-[10.5px] text-night-200">かんたんAI睡眠診断（8問）＋15 XP</span>
+            </span>
+            <span className="text-moon-400 font-black">→</span>
+          </button>
+        </div>
+      )}
+
       {/* クイックアクション */}
       <div className="px-4 mt-3 grid grid-cols-4 gap-2">
         {[
@@ -1350,6 +1660,10 @@ function HomeScreen() {
           { icon: '📸', label: '姿勢分析', go: () => nav('posture') },
           { icon: '🏥', label: '来店ガイド', go: () => nav('visit') },
           { icon: '🧘', label: 'ストレッチ', go: () => nav('care') },
+          { icon: '📋', label: 'かんたん診断', go: () => nav('quick') },
+          { icon: '🔬', label: '本診断30問', go: () => nav('assess') },
+          { icon: '🎧', label: 'サウンド', go: () => nav('sounds') },
+          { icon: '📖', label: 'まなぶ', go: () => nav('care', { tab: 'learn' }) },
         ].map((a, i) => (
           <button key={i} onClick={a.go} className="btn-press card-deep p-3 flex flex-col items-center gap-1.5">
             <span className="text-[22px]">{a.icon}</span>
@@ -1607,6 +1921,18 @@ function SleepScreen({ route }) {
         </div>
       </div>
 
+      {/* おやすみサウンド */}
+      <div className="px-4 mt-3">
+        <button onClick={() => nav('sounds')} className="btn-press w-full card p-3.5 flex items-center gap-3 text-left">
+          <span className="text-xl">🎧</span>
+          <span className="flex-1">
+            <span className="block text-[13px] font-black text-cream-50">おやすみサウンドで入眠モードへ</span>
+            <span className="block text-[10.5px] text-night-200">528Hz・シータ波・雨音｜タイマー付き</span>
+          </span>
+          <span className="text-moon-400 font-black">→</span>
+        </button>
+      </div>
+
       {/* 履歴 */}
       <div className="px-4 mt-4">
         <SectionTitle icon="🗓️" title="これまでの記録"
@@ -1693,7 +2019,7 @@ function SoupyScreen() {
       <div className="px-4 mt-3">
         <NightSky className="rounded-3xl border border-night-500/60" dense>
           <div className="pt-5 flex justify-center">
-            <Soupy size={215} mood={mood} wearing={state.soupy.wearing} onTap={pet} />
+            <Soupy3DOrSvg size={220} mood={mood} wearing={state.soupy.wearing} onTap={pet} scene="moon" />
           </div>
           <div className="text-center pb-4 px-4">
             <p className="text-[15px] font-black text-cream-50 mt-1">スーピーくん <span className="text-moon-300">Lv.{lv}</span></p>
@@ -1796,6 +2122,7 @@ function CareScreen({ route }) {
       <div className="px-4 mt-2 flex gap-2">
         <Chip active={tab === 'stretch'} onClick={() => setTab('stretch')}>🤸 ストレッチ</Chip>
         <Chip active={tab === 'learn'} onClick={() => setTab('learn')}>📖 まなぶ</Chip>
+        <Chip onClick={() => nav('sounds')}>🎧 サウンド</Chip>
       </div>
 
       {tab === 'stretch' && (
@@ -1851,6 +2178,22 @@ function CareScreen({ route }) {
             <Soupy size={44} animate={false} showZzz={false} />
             <p className="text-[11.5px] text-night-100 leading-relaxed font-bold">毎日の行動はぜんぶ、自律神経とねむりにつながってるんだ。1日1つ、いっしょに学ぼう！</p>
           </div>
+          <SectionTitle icon="🎬" title="ミニ講座" sub="サロンで流している教育コンテンツ" />
+          <div className="flex flex-col gap-2 mb-4">
+            {SLIDES.map(s => (
+              <button key={s.id} onClick={() => nav('slides', { id: s.id })} className="btn-press card p-3.5 flex items-center gap-3 text-left">
+                <span className="w-11 h-11 rounded-2xl bg-night-500 flex items-center justify-center text-[22px] shrink-0">{s.emoji}</span>
+                <span className="flex-1 min-w-0">
+                  <span className="block text-[13px] font-black text-cream-50 leading-snug">{s.title}</span>
+                  <span className="block text-[10.5px] text-night-200 mt-0.5">スライド{s.pages.length}枚・約{s.mins}分</span>
+                </span>
+                {state.slidesDone.includes(s.id)
+                  ? <span className="text-[9.5px] font-black shrink-0" style={{ color: '#4cc2ae' }}>視聴ずみ✓</span>
+                  : <span className="text-[9.5px] font-black text-moon-300 shrink-0">+10 XP</span>}
+              </button>
+            ))}
+          </div>
+          <SectionTitle icon="📖" title="よみもの" sub="1日1つ、眠りにくわしくなろう" />
           <div className="flex flex-col gap-2">
             {ARTICLES.map(a => {
               const read = state.learnRead.includes(a.id);
@@ -2086,7 +2429,62 @@ function ArticleScreen({ route }) {
    ============================================================ */
 function cartCount(state) { return (state.cart || []).reduce((a, c) => a + c.qty, 0); }
 
-function ShopScreen() {
+/* 定額プラン・サブスク（設計図⑪） */
+function SubsSection() {
+  const { state, update } = useApp();
+  const [join, setJoin] = useState(null);
+  const current = state.subscription;
+  const plan = join && SUB_PLAN[join];
+  return (
+    <div className="px-4 mt-4">
+      <SectionTitle icon="📅" title="定額プラン・サブスク" sub="続けやすい仕組みで「整う」を習慣に" />
+      <div className="flex flex-col gap-2.5">
+        {SUB_PLANS.map(p => {
+          const joined = current && current.planId === p.id;
+          return (
+            <div key={p.id} className={`card p-4 relative ${joined ? 'ring-2 ring-moon-400/70' : ''}`}>
+              {p.popular && <span className="absolute -top-2 right-4 text-[9px] font-black text-night-900 bg-moon-400 rounded-full px-2 py-0.5">人気No.1</span>}
+              <div className="flex items-center gap-3">
+                <span className="w-11 h-11 rounded-2xl flex items-center justify-center text-[22px]" style={{ background: p.color + '22' }}>{p.emoji}</span>
+                <div className="flex-1">
+                  <p className="text-[13px] font-black text-cream-50">{p.name}</p>
+                  <p className="text-[11px] text-night-200">{p.cadence}・<span className="text-[14px] font-black text-cream-50">{yen(p.price)}</span>/月</p>
+                </div>
+                {joined
+                  ? <span className="text-[10px] font-black text-moon-300 border border-moon-400/50 rounded-full px-2.5 py-1">加入中</span>
+                  : <Btn small kind="moon" onClick={() => setJoin(p.id)}>加入する</Btn>}
+              </div>
+              <p className="text-[11px] text-night-100 leading-relaxed mt-2">{p.desc}</p>
+              <div className="flex flex-wrap gap-1 mt-2">
+                {p.perks.map((x, i) => <span key={i} className="text-[9.5px] font-bold text-night-100 bg-night-500/60 rounded-full px-2 py-0.5">✓ {x}</span>)}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <Modal open={!!join} onClose={() => setJoin(null)}>
+        {plan && (
+          <div className="text-center py-2">
+            <span className="text-[38px]">{plan.emoji}</span>
+            <h3 className="text-[16px] font-black text-cream-50 mt-1.5">{plan.name}に加入しますか？</h3>
+            <p className="text-[12px] text-night-100 mt-1">{plan.cadence}・{yen(plan.price)}/月（デモ・請求なし）</p>
+            {current && current.planId !== plan.id && <p className="text-[10.5px] text-[#f0968c] font-bold mt-1.5">現在のプランから変更になります</p>}
+            <div className="mt-4 flex gap-2">
+              <Btn kind="ghost" full onClick={() => setJoin(null)}>やめる</Btn>
+              <Btn kind="moon" full onClick={() => {
+                update(st => { st.subscription = { planId: plan.id, since: todayStr() }; gainXp(st, 30, 'サブスク加入'); });
+                toast(`${plan.name}へようこそ！ +30 XP`, 'xp');
+                setJoin(null);
+              }}>加入する</Btn>
+            </div>
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
+function ShopScreen({ route }) {
   const { state, update, nav } = useApp();
   const [cat, setCat] = useState('all');
   const recs = useMemo(() => buildRecommendations(state), [state]);
@@ -2116,6 +2514,8 @@ function ShopScreen() {
         </button>
       </div>
 
+      {route?.params?.view === 'subs' && <SubsSection />}
+
       {/* あなたへのおすすめ */}
       {recProducts.length > 0 && (
         <div className="px-4 mt-3">
@@ -2142,7 +2542,10 @@ function ShopScreen() {
         </div>
       )}
 
-      <div className="px-4 mt-3 flex gap-1.5 overflow-x-auto no-scrollbar">
+      {/* 定額プラン（来店ガイドから来た場合は最上部に表示済み） */}
+      {route?.params?.view !== 'subs' && <SubsSection />}
+
+      <div className="px-4 mt-4 flex gap-1.5 overflow-x-auto no-scrollbar">
         {cats.map(c => <Chip key={c} active={cat === c} onClick={() => setCat(c)}>{c === 'all' ? 'すべて' : c}</Chip>)}
       </div>
 
@@ -2227,6 +2630,7 @@ function ProductScreen({ route }) {
 function CartScreen() {
   const { state, update, back, nav } = useApp();
   const [done, setDone] = useState(null);
+  const [delivery, setDelivery] = useState('store');
   const items = (state.cart || []).map(c => ({ ...c, p: PRODUCT[c.productId] })).filter(x => x.p);
   const total = items.reduce((a, x) => a + x.p.price * x.qty, 0);
 
@@ -2238,7 +2642,7 @@ function CartScreen() {
   });
 
   const checkout = () => {
-    const order = { id: uid(), date: todayStr(), items: items.map(x => ({ id: x.productId, qty: x.qty })), total };
+    const order = { id: uid(), date: todayStr(), items: items.map(x => ({ id: x.productId, qty: x.qty })), total, delivery };
     update(st => {
       st.orders.push(order);
       // 回数券商品は残高に追加
@@ -2281,11 +2685,22 @@ function CartScreen() {
         </div>
         {items.length > 0 && (
           <div className="mt-4">
+            <div className="card p-3.5 mb-2.5">
+              <p className="text-[11px] font-black text-night-100 mb-2">お受け取り方法（在庫なし・持ち帰り不要）</p>
+              <div className="grid grid-cols-2 gap-2">
+                {[{ id: 'store', icon: '🏥', t: '次回ご来店時に受け取り' }, { id: 'ship', icon: '🚚', t: '自宅へ配送（送料無料）' }].map(o => (
+                  <button key={o.id} onClick={() => setDelivery(o.id)}
+                    className={`btn-press p-2.5 rounded-xl border text-[11px] font-bold ${delivery === o.id ? 'bg-cream-100 text-night-900 border-cream-100' : 'bg-night-600 text-night-100 border-night-400/40'}`}>
+                    {o.icon} {o.t}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="card p-4 flex items-center justify-between">
               <span className="text-[12.5px] font-bold text-night-100">ごうけい（税込）</span>
               <span className="text-[20px] font-black text-cream-50">{yen(total)}</span>
             </div>
-            <p className="text-[10px] text-night-300 mt-2 text-center">※デモ決済です。実際の請求はありません。お受け取りはサロンにて。</p>
+            <p className="text-[10px] text-night-300 mt-2 text-center">※デモ決済です。実際の請求はありません。店頭ではQRコードからこの画面にアクセスできます。</p>
             <div className="mt-3"><Btn kind="moon" full onClick={checkout}>ちゅうもんを確定する</Btn></div>
           </div>
         )}
@@ -2321,8 +2736,8 @@ function CheckinModal({ open, onClose }) {
       if (useTk) { useTk.used++; useTk.history.push({ date: todayStr(), note: '睡眠整体' }); }
       st.visits.push({ id: uid(), date: todayStr(), menu: '睡眠整体', note: useTk ? `回数券使用（のこり${useTk.total - useTk.used}回）` : '都度払い' });
       gainXp(st, 50, 'ご来店');
-      if (!st.visitFlow) st.visitFlow = { step: 1, startedAt: todayStr(), beforeId: null, afterId: null, prescribed: [], recommended: [] };
-      else st.visitFlow.step = Math.max(st.visitFlow.step, 1);
+      if (!st.visitFlow) st.visitFlow = { step: 2, startedAt: todayStr(), beforeId: null, afterId: null, prescribed: [], goalNote: '', feelBefore: null, feelAfter: null };
+      else st.visitFlow.step = Math.max(st.visitFlow.step, 2);
     });
     setStep('done');
   };
@@ -2371,11 +2786,16 @@ function CheckinModal({ open, onClose }) {
 }
 
 function MemberScreen() {
-  const { state, back, nav } = useApp();
+  const { state, update, back, nav } = useApp();
   const [checkin, setCheckin] = useState(false);
   const [openTk, setOpenTk] = useState(null);
+  const [openKarte, setOpenKarte] = useState(null);
+  const [cancelSub, setCancelSub] = useState(false);
   const { lv } = levelFromXp(state.soupy.xp);
   const remaining = ticketRemaining(state);
+  const sub = state.subscription && SUB_PLAN[state.subscription.planId];
+  const lastVisit = state.visits[state.visits.length - 1];
+  const karteVisit = openKarte && state.visits.find(v => v.id === openKarte);
 
   return (
     <div className="min-h-screen">
@@ -2414,6 +2834,35 @@ function MemberScreen() {
         </NightSky>
 
         <div className="mt-4"><Btn kind="moon" full onClick={() => setCheckin(true)}>🏥 ご来店チェックイン</Btn></div>
+
+        {/* サブスク会員ステータス */}
+        <div className="mt-4">
+          <SectionTitle icon="📅" title="ご加入プラン" />
+          {sub ? (
+            <div className="card p-4">
+              <div className="flex items-center gap-3">
+                <span className="w-11 h-11 rounded-2xl flex items-center justify-center text-[22px]" style={{ background: sub.color + '22' }}>{sub.emoji}</span>
+                <div className="flex-1">
+                  <p className="text-[13px] font-black text-cream-50">{sub.name}</p>
+                  <p className="text-[10.5px] text-night-200">{sub.cadence}・{yen(sub.price)}/月｜{fmtJP(state.subscription.since)}から</p>
+                </div>
+                <button onClick={() => setCancelSub(true)} className="text-[10.5px] font-bold text-night-300">解約する</button>
+              </div>
+              {lastVisit && (
+                <p className="text-[11px] text-night-100 mt-2.5">📅 次回のおすすめ来店日：<span className="font-black text-moon-300">{fmtJP(addDays(lastVisit.date, sub.id === 'sub_std' ? 14 : 28))}</span> ごろ</p>
+              )}
+            </div>
+          ) : (
+            <button onClick={() => nav('shop', { view: 'subs' })} className="btn-press w-full card p-3.5 flex items-center gap-3 text-left">
+              <span className="text-xl">📅</span>
+              <span className="flex-1">
+                <span className="block text-[12.5px] font-black text-cream-50">定額プランで「整う」を習慣に</span>
+                <span className="block text-[10.5px] text-night-200">月1回〜のメンテナンス会員・おうちケア定期便{lastVisit ? `｜次回目安 ${fmtMD(addDays(lastVisit.date, 14))}` : ''}</span>
+              </span>
+              <span className="text-moon-400 font-black">→</span>
+            </button>
+          )}
+        </div>
 
         {/* 回数券 */}
         <div className="mt-5">
@@ -2470,12 +2919,38 @@ function MemberScreen() {
                   <span className="text-[10.5px] text-night-200 ml-auto">{v.menu}</span>
                 </div>
                 {v.note && <p className="text-[10.5px] text-night-200 mt-1 pl-6">{v.note}</p>}
+                {v.karte && v.karte.comments && (
+                  <button onClick={() => setOpenKarte(v.id)} className="text-[10.5px] font-black text-moon-300 mt-1.5 pl-6">📄 改善レポートを見る</button>
+                )}
               </div>
             ))}
           </div>
         </div>
       </div>
       <CheckinModal open={checkin} onClose={() => setCheckin(false)} />
+
+      {/* 改善レポート閲覧 */}
+      <Modal open={!!karteVisit} onClose={() => setOpenKarte(null)}>
+        {karteVisit && (
+          <div>
+            <ReportView report={karteVisit.karte} />
+            <div className="mt-4"><Btn kind="primary" full onClick={() => setOpenKarte(null)}>とじる</Btn></div>
+          </div>
+        )}
+      </Modal>
+
+      {/* サブスク解約確認 */}
+      <Modal open={cancelSub} onClose={() => setCancelSub(false)}>
+        <div className="text-center py-2">
+          <Soupy size={110} mood="tired" showZzz={false} className="mx-auto" />
+          <h3 className="text-[15px] font-black text-cream-50 mt-1">プランを解約しますか？</h3>
+          <p className="text-[11.5px] text-night-200 mt-1.5">解約すると特典（割引・優先予約など）が使えなくなります。</p>
+          <div className="mt-4 flex gap-2">
+            <Btn kind="ghost" full onClick={() => setCancelSub(false)}>つづける</Btn>
+            <Btn kind="danger" full onClick={() => { update(st => { st.subscription = null; }); setCancelSub(false); toast('プランを解約しました'); }}>解約する</Btn>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -2772,8 +3247,8 @@ function PostureScreen({ route }) {
       const withImg = st.posture.filter(p => p.img);
       if (withImg.length > 12) withImg.slice(0, withImg.length - 12).forEach(p => { p.img = null; });
       if (st.visitFlow) {
-        if (phase === 'before') { st.visitFlow.beforeId = rec.id; st.visitFlow.step = Math.max(st.visitFlow.step, 3); }
-        if (phase === 'after') { st.visitFlow.afterId = rec.id; st.visitFlow.step = Math.max(st.visitFlow.step, 5); }
+        if (phase === 'before') { st.visitFlow.beforeId = rec.id; st.visitFlow.step = Math.max(st.visitFlow.step, 6); }
+        if (phase === 'after') { st.visitFlow.afterId = rec.id; st.visitFlow.step = Math.max(st.visitFlow.step, 7); }
       }
     });
     toast('分析結果をほぞんしました 📊');
@@ -3045,10 +3520,515 @@ function PostureCompareScreen() {
 }
 
 /* ============================================================
+   SECTION 15.5: おやすみサウンド（Web Audioで周波数を生成・完全オフライン）
+   ============================================================ */
+const Sound = {
+  ctx: null, master: null, nodes: [], playing: null, timerId: null, _noise: null,
+  ensure() {
+    if (!this.ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      this.ctx = new AC();
+      this.master = this.ctx.createGain();
+      this.master.gain.value = 0.5;
+      this.master.connect(this.ctx.destination);
+    }
+    if (this.ctx.state === 'suspended') this.ctx.resume();
+  },
+  noiseBuffer() {
+    if (this._noise) return this._noise;
+    const len = this.ctx.sampleRate * 2;
+    const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    let last = 0;
+    for (let i = 0; i < len; i++) { const w = Math.random() * 2 - 1; last = (last + 0.02 * w) / 1.02; d[i] = last * 3.5; }
+    this._noise = buf;
+    return buf;
+  },
+  start(id, volume) {
+    this.stop();
+    this.ensure();
+    this.master.gain.value = volume;
+    const ctx = this.ctx, add = n => { this.nodes.push(n); return n; };
+    const mk = (type, freq, gainV, pan) => {
+      const o = add(ctx.createOscillator()); o.type = type; o.frequency.value = freq;
+      const g = add(ctx.createGain()); g.gain.value = gainV;
+      o.connect(g);
+      if (pan !== undefined && ctx.createStereoPanner) { const p = add(ctx.createStereoPanner()); p.pan.value = pan; g.connect(p); p.connect(this.master); }
+      else g.connect(this.master);
+      o.start();
+      return { o, g };
+    };
+    const mkNoise = (cutoff, gainV) => {
+      const src = add(ctx.createBufferSource()); src.buffer = this.noiseBuffer(); src.loop = true;
+      const f = add(ctx.createBiquadFilter()); f.type = 'lowpass'; f.frequency.value = cutoff;
+      const g = add(ctx.createGain()); g.gain.value = gainV;
+      src.connect(f); f.connect(g); g.connect(this.master);
+      src.start();
+      return { src, f, g };
+    };
+    if (id === '528') {
+      const t = mk('sine', 528, 0.16);
+      const lfo = add(ctx.createOscillator()); lfo.frequency.value = 0.15;
+      const lg = add(ctx.createGain()); lg.gain.value = 0.05;
+      lfo.connect(lg); lg.connect(t.g.gain); lfo.start();
+      mkNoise(420, 0.05);
+    } else if (id === 'theta') {
+      mk('sine', 180, 0.15, -1);
+      mk('sine', 184, 0.15, 1);
+      mkNoise(300, 0.03);
+    } else if (id === 'rain') {
+      mkNoise(850, 0.5);
+      const drips = mkNoise(2600, 0.08);
+      const lfo = add(ctx.createOscillator()); lfo.frequency.value = 0.4;
+      const lg = add(ctx.createGain()); lg.gain.value = 900;
+      lfo.connect(lg); lg.connect(drips.f.frequency); lfo.start();
+    }
+    this.playing = id;
+  },
+  stop() {
+    clearTimeout(this.timerId); this.timerId = null;
+    this.nodes.forEach(n => { try { if (n.stop) n.stop(); } catch (e) {} try { n.disconnect(); } catch (e) {} });
+    this.nodes = [];
+    this.playing = null;
+  },
+  setVolume(v) { if (this.master) this.master.gain.value = v; },
+  setTimer(mins, onEnd) {
+    clearTimeout(this.timerId);
+    if (mins) this.timerId = setTimeout(() => { this.stop(); onEnd && onEnd(); }, mins * 60000);
+  },
+};
+
+function SoundsScreen() {
+  const { back } = useApp();
+  const [playing, setPlaying] = useState(Sound.playing);
+  const [volume, setVolume] = useState(0.5);
+  const [timer, setTimer] = useState(30);
+
+  const toggle = (id) => {
+    if (playing === id) { Sound.stop(); setPlaying(null); return; }
+    try {
+      Sound.start(id, volume);
+      Sound.setTimer(timer, () => setPlaying(null));
+      setPlaying(id);
+    } catch (e) { console.warn(e); toast('この環境では音声を再生できませんでした', 'err'); }
+  };
+
+  return (
+    <div className="min-h-screen">
+      <BackHeader title="🎧 おやすみサウンド" onBack={back} />
+      <div className="p-4 pb-8">
+        <div className="card-deep p-3.5 flex gap-2.5 items-center">
+          <Soupy size={46} animate={false} showZzz={false} />
+          <p className="text-[11.5px] text-night-100 leading-relaxed font-bold">周波数の音は、その場でこの端末が奏でているよ。画面を閉じても流れつづけるから、そのまま目を閉じてね。</p>
+        </div>
+
+        <div className="mt-4 flex flex-col gap-2.5">
+          {SOUND_PRESETS.map(s => (
+            <button key={s.id} onClick={() => toggle(s.id)}
+              className={`btn-press card p-4 text-left flex items-center gap-3 ${playing === s.id ? 'ring-2 ring-moon-400' : ''}`}>
+              <span className={`w-12 h-12 rounded-2xl flex items-center justify-center text-[24px] ${playing === s.id ? 'bg-moon-400/20' : 'bg-night-500'}`}>{s.emoji}</span>
+              <span className="flex-1 min-w-0">
+                <span className="text-[9.5px] font-black text-moon-300">{s.tag}</span>
+                <span className="block text-[13.5px] font-black text-cream-50">{s.name}</span>
+                <span className="block text-[10.5px] text-night-200 mt-0.5 leading-relaxed">{s.desc}</span>
+              </span>
+              <span className="text-[22px]">{playing === s.id ? '⏸' : '▶️'}</span>
+            </button>
+          ))}
+        </div>
+
+        <div className="card p-4 mt-4">
+          <p className="text-[11px] font-black text-night-100 mb-1.5">おんりょう</p>
+          <input type="range" min="0" max="1" step="0.05" value={volume} className="w-full accent-[#f6d97e]"
+            onChange={e => { const v = Number(e.target.value); setVolume(v); Sound.setVolume(v); }} />
+          <p className="text-[11px] font-black text-night-100 mb-1.5 mt-3">タイマー（自動でとまる）</p>
+          <div className="flex gap-1.5">
+            {[15, 30, 60, 0].map(m => (
+              <Chip key={m} active={timer === m} onClick={() => { setTimer(m); if (playing) Sound.setTimer(m, () => setPlaying(null)); }}>
+                {m === 0 ? 'なし' : `${m}分`}
+              </Chip>
+            ))}
+          </div>
+        </div>
+        <p className="text-[10px] text-night-300 mt-3 leading-relaxed">💡 シータ波はイヤホン・ヘッドホンで左右の音を分けて聴くと効果的です。運転中の使用はお控えください。</p>
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   SECTION 15.6: 来店前AI簡易診断（設計図①）・本診断（設計図②）
+   ============================================================ */
+function QuickCheckScreen({ route }) {
+  const { state, update, back } = useApp();
+  const [idx, setIdx] = useState(0);
+  const [answers, setAnswers] = useState([]);
+  const [result, setResult] = useState(null);
+
+  const pick = (v) => {
+    const next = [...answers]; next[idx] = v;
+    setAnswers(next);
+    if (idx + 1 < QUICK_QS.length) { setIdx(idx + 1); return; }
+    const res = quickResult(next);
+    const rec = { id: uid(), date: todayStr(), answers: next, ...res };
+    update(st => {
+      st.quickChecks.push(rec);
+      if (!xpDoneToday(st, 'かんたん診断')) gainXp(st, 15, 'かんたん診断');
+    });
+    setResult(rec);
+  };
+
+  return (
+    <div className="min-h-screen">
+      <BackHeader title="📋 かんたん睡眠診断" onBack={back} />
+      {!result ? (
+        <div className="p-4">
+          <ProgressBar pct={(idx) / QUICK_QS.length * 100} color={C.moon} />
+          <p className="text-[10.5px] text-night-200 font-bold mt-1.5">Q{idx + 1} / {QUICK_QS.length}　約3分・来店前のセルフチェック</p>
+          <div className="card p-5 mt-3 anim-pop" key={idx}>
+            <p className="text-[16px] font-black text-cream-50 leading-relaxed">{QUICK_QS[idx].q}</p>
+            <div className="flex flex-col gap-2 mt-4">
+              {QUICK_QS[idx].opts.map((o, i) => (
+                <button key={i} onClick={() => pick(i)}
+                  className="btn-press text-left px-4 py-3.5 rounded-2xl border border-night-400/40 bg-night-600 text-[13px] font-bold text-cream-50 hover:border-moon-400/60">
+                  {o}
+                </button>
+              ))}
+            </div>
+            {idx > 0 && <button onClick={() => setIdx(idx - 1)} className="mt-3 text-[11px] font-bold text-night-300">← ひとつ前へ</button>}
+          </div>
+          <div className="card-deep p-3.5 mt-3 flex gap-2.5 items-center">
+            <Soupy size={40} animate={false} showZzz={false} />
+            <p className="text-[11px] text-night-100 font-bold">直感でOK！ぜんぶで{QUICK_QS.length}問だよ</p>
+          </div>
+        </div>
+      ) : (
+        <div className="p-4 pb-8 anim-slide-up">
+          <div className="card p-5 text-center">
+            <p className="text-[11px] font-black text-moon-300">あなたのねむりの現在地</p>
+            <div className="mt-2"><ScoreRing score={result.score} size={124} sub="快眠スコア" /></div>
+            <p className="text-[16px] font-black text-cream-50 mt-3">{result.emoji} タイプ：{result.label}</p>
+            <p className="text-[12px] text-night-100 leading-relaxed mt-2 text-left">{result.text}</p>
+          </div>
+          <div className="card-deep p-4 mt-3 flex gap-3 items-start">
+            <Soupy size={52} mood="happy" showZzz={false} />
+            <div>
+              <p className="text-[10.5px] font-black text-moon-300 mb-1">スーピーくんより</p>
+              <p className="text-[11.5px] text-night-100 leading-relaxed font-bold">くわしい原因はサロンの「本診断（30問）」でわかるよ。ご来店時にスタッフとやってみよう！</p>
+            </div>
+          </div>
+          <div className="mt-4 flex flex-col gap-2">
+            <Btn kind="moon" full onClick={back}>OK！</Btn>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AssessScreen({ route }) {
+  const { state, update, back, nav } = useApp();
+  const [phase, setPhase] = useState('intro'); // intro | quiz | result
+  const [idx, setIdx] = useState(0);
+  const [answers, setAnswers] = useState([]);
+  const [result, setResult] = useState(null);
+  const q = ASSESS_QS[idx];
+  const cat = q && ASSESS_CATS.find(c => c.id === q.cat);
+
+  const pick = (v) => {
+    const next = [...answers]; next[idx] = v;
+    setAnswers(next);
+    if (idx + 1 < ASSESS_QS.length) { setIdx(idx + 1); return; }
+    const res = assessResult(next);
+    const rec = { id: uid(), date: todayStr(), answers: next, ...res };
+    update(st => {
+      st.assessments.push(rec);
+      if (!xpDoneToday(st, 'ほんかく診断')) gainXp(st, 25, 'ほんかく診断');
+      if (st.visitFlow) st.visitFlow.step = Math.max(st.visitFlow.step, 3);
+    });
+    setResult(rec);
+    setPhase('result');
+  };
+
+  return (
+    <div className="min-h-screen">
+      <BackHeader title="🔬 本診断（30問）" onBack={back} />
+      {phase === 'intro' && (
+        <div className="p-4 pb-8">
+          <NightSky className="rounded-3xl border border-night-500/60">
+            <div className="p-5 text-center">
+              <Soupy size={110} mood="happy" showZzz={false} className="mx-auto" />
+              <h2 className="text-[17px] font-black text-cream-50 mt-1">あなたの眠りを徹底分析</h2>
+              <p className="text-[11.5px] text-night-100 mt-1.5">30問・約8〜10分｜5つの角度から原因をさがします</p>
+            </div>
+          </NightSky>
+          <div className="card p-4 mt-3">
+            {ASSESS_CATS.map(c => (
+              <p key={c.id} className="text-[12.5px] font-bold text-night-100 py-1.5 border-b border-night-500/40 last:border-0">
+                {c.emoji} {c.name}<span className="text-night-300 text-[10.5px] ml-2">6問</span>
+              </p>
+            ))}
+          </div>
+          <p className="text-[10.5px] text-night-300 mt-2.5 leading-relaxed">💡 結果はスタッフとのカウンセリングで使います。深く考えず、最近1ヶ月の感覚でお答えください。</p>
+          <div className="mt-4"><Btn kind="moon" full onClick={() => setPhase('quiz')}>診断をはじめる</Btn></div>
+        </div>
+      )}
+
+      {phase === 'quiz' && (
+        <div className="p-4">
+          <ProgressBar pct={idx / ASSESS_QS.length * 100} color={C.moon} />
+          <div className="flex items-center justify-between mt-1.5">
+            <p className="text-[10.5px] text-night-200 font-bold">Q{idx + 1} / {ASSESS_QS.length}</p>
+            <p className="text-[10.5px] font-black text-moon-300">{cat.emoji} {cat.name}</p>
+          </div>
+          <div className="card p-5 mt-3 anim-pop" key={idx}>
+            <p className="text-[15.5px] font-black text-cream-50 leading-relaxed">{q.q}</p>
+            <div className="flex flex-col gap-2 mt-4">
+              {ASSESS_OPTS.map((o, i) => (
+                <button key={i} onClick={() => pick(i)}
+                  className={`btn-press text-left px-4 py-3 rounded-2xl border text-[13px] font-bold text-cream-50 ${answers[idx] === i ? 'border-moon-400 bg-moon-400/10' : 'border-night-400/40 bg-night-600 hover:border-moon-400/60'}`}>
+                  {o}
+                </button>
+              ))}
+            </div>
+            {idx > 0 && <button onClick={() => setIdx(idx - 1)} className="mt-3 text-[11px] font-bold text-night-300">← ひとつ前へ</button>}
+          </div>
+        </div>
+      )}
+
+      {phase === 'result' && result && (
+        <div className="p-4 pb-8 anim-slide-up">
+          <div className="card p-5 text-center">
+            <p className="text-[11px] font-black text-moon-300">AI分析レポート</p>
+            <div className="mt-2"><ScoreRing score={result.total} size={124} sub="整いスコア" showLabel={false} /></div>
+            <p className="text-[15px] font-black text-cream-50 mt-2">ランク{result.level.rank}｜{result.level.label}</p>
+          </div>
+
+          <div className="card p-4 mt-3">
+            <p className="text-[11px] font-black text-night-200 mb-2.5">カテゴリ別スコア</p>
+            {ASSESS_CATS.map(c => (
+              <div key={c.id} className="flex items-center gap-2.5 py-1.5">
+                <span className="w-[104px] text-[11.5px] font-bold text-cream-50 shrink-0">{c.emoji} {c.name}</span>
+                <div className="flex-1"><ProgressBar pct={result.cats[c.id]} color={result.cats[c.id] >= 70 ? C.peri : C.serious} h={9} /></div>
+                <span className="w-8 text-right text-[12.5px] font-black" style={{ color: result.cats[c.id] >= 70 ? '#a5b4f5' : '#f0968c' }}>{result.cats[c.id]}</span>
+              </div>
+            ))}
+          </div>
+
+          {result.worst.map(catId => {
+            const c = ASSESS_CATS.find(x => x.id === catId);
+            return (
+              <div key={catId} className="card p-4 mt-3">
+                <p className="text-[12px] font-black text-cream-50 mb-1"><span className="text-[#f0968c]">重点ポイント</span>｜{c.emoji} {c.name}（{result.cats[catId]}点）</p>
+                <p className="text-[11.5px] text-night-100 leading-relaxed">{ASSESS_CAT_ADVICE[catId].low}</p>
+              </div>
+            );
+          })}
+
+          <div className="card-deep p-4 mt-3 flex gap-3 items-start">
+            <Soupy size={52} mood="sleep" showZzz={false} />
+            <div>
+              <p className="text-[10.5px] font-black text-moon-300 mb-1">スーピーくんの総評</p>
+              <p className="text-[11.5px] text-night-100 leading-relaxed font-bold">
+                いちばんの強みは「{ASSESS_CATS.find(c => c.id === result.bestId)?.name}」（{result.cats[result.bestId]}点）！
+                {result.worst.length ? `のびしろは「${result.worst.map(id => ASSESS_CATS.find(c => c.id === id)?.name).join('」と「')}」。ここはサロンの施術とホームケアで一緒に整えていこうね。` : 'この調子でキープしていこうね！'}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-col gap-2">
+            <Btn kind="moon" full onClick={back}>結果をほぞんして終わる</Btn>
+            <Btn kind="ghost" full onClick={() => nav('care')}>おすすめのケアを見る</Btn>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ============================================================
+   SECTION 15.7: 教育スライド（設計図③ 教育動画の代替）
+   ============================================================ */
+function SlidePlayerScreen({ route }) {
+  const { state, update, back } = useApp();
+  const deck = SLIDES.find(s => s.id === route.params.id);
+  const [idx, setIdx] = useState(0);
+  if (!deck) return <div className="p-6"><EmptyState text="コンテンツが見つかりません" /></div>;
+  const page = deck.pages[idx];
+  const last = idx === deck.pages.length - 1;
+
+  const finish = () => {
+    update(st => {
+      if (!st.slidesDone.includes(deck.id)) { st.slidesDone.push(deck.id); gainXp(st, 10, 'まなぶ'); }
+      if (st.visitFlow) st.visitFlow.step = Math.max(st.visitFlow.step, 4);
+    });
+    toast('視聴おつかれさまでした！');
+    back();
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col">
+      <BackHeader title={`${deck.emoji} ${deck.title}`} onBack={back} />
+      <div className="p-4 flex-1 flex flex-col">
+        <div className="flex gap-1 justify-center">
+          {deck.pages.map((_, i) => (
+            <span key={i} className={`h-1.5 rounded-full transition-all ${i === idx ? 'w-6 bg-moon-400' : 'w-1.5 bg-night-500'}`} />
+          ))}
+        </div>
+        <NightSky className="rounded-3xl border border-night-500/60 mt-3 flex-1">
+          <div className="p-6 min-h-[330px] flex flex-col justify-center anim-pop" key={idx}>
+            <p className="text-[11px] font-black text-moon-300">{idx + 1} / {deck.pages.length}</p>
+            <h2 className="text-[20px] font-black text-cream-50 mt-1.5 leading-snug">{page.h}</h2>
+            <p className="text-[13.5px] text-night-50 leading-[2] mt-4">{page.t}</p>
+          </div>
+        </NightSky>
+        <div className="card-deep p-3 mt-3 flex gap-2.5 items-center">
+          <Soupy size={42} mood={last ? 'happy' : 'sleep'} animate={false} showZzz={false} />
+          <p className="text-[11px] text-night-100 font-bold">{last ? 'これでおしまい！おつかれさま🌟' : 'だいじなところだよ、ゆっくり読んでね'}</p>
+        </div>
+        <div className="flex gap-2 mt-3 pb-6">
+          <Btn kind="ghost" onClick={() => setIdx(Math.max(0, idx - 1))} disabled={idx === 0}>← まえ</Btn>
+          {last
+            ? <Btn kind="moon" full onClick={finish}>視聴かんりょう（+10 XP）</Btn>
+            : <Btn kind="primary" full onClick={() => setIdx(idx + 1)}>つぎへ →</Btn>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   SECTION 15.8: 改善レポート（設計図⑧ AI再評価・レポート）
+   ============================================================ */
+const FEEL_AXES = [
+  { id:'light', emoji:'🪶', label:'からだの軽さ' },
+  { id:'neck',  emoji:'🦒', label:'首・肩の動かしやすさ' },
+  { id:'mood',  emoji:'🌤️', label:'気分のスッキリ感' },
+];
+
+function buildVisitReport(state, vf) {
+  const posture = state.posture || [];
+  const before = posture.find(p => p.id === vf.beforeId) || null;
+  const after = posture.find(p => p.id === vf.afterId) || null;
+  const logs7 = recentLogs(state, 7);
+  const assess = (state.assessments || [])[state.assessments.length - 1] || null;
+  const comments = [];
+  if (before && after) {
+    const d = after.score - before.score;
+    comments.push(d > 0
+      ? `姿勢スコアが ${before.score}点 → ${after.score}点（+${d}）に改善。${after.mode === 'side' ? '首のラインが整い、呼吸の通り道がひろがった状態です。' : '左右のバランスが整い、からだが休まりやすい状態です。'}`
+      : `姿勢スコアは ${before.score}点 → ${after.score}点。数値の変化は小さくても、筋肉のゆるみは呼吸の深さに表れます。`);
+  }
+  if (vf.feelBefore && vf.feelAfter) {
+    const gains = FEEL_AXES.map(a => vf.feelAfter[a.id] - vf.feelBefore[a.id]);
+    const up = FEEL_AXES.filter((a, i) => gains[i] > 0);
+    if (up.length) comments.push(`ご自身の体感でも「${up.map(a => a.label).join('」「')}」がアップ。この感覚が、副交感神経が働き始めたサインです。`);
+  }
+  if (logs7.length) comments.push(`この7日間の平均睡眠スコアは${Math.round(avg(logs7.map(l => l.score)))}点。今夜の記録で施術後の変化を確認しましょう。`);
+  comments.push('整えた状態は2〜3週間かけて少しずつ戻ります。処方ホームケアで「戻りにくいからだ」へ。');
+  return {
+    date: todayStr(),
+    before: before ? { score: before.score, img: before.img, mode: before.mode } : null,
+    after: after ? { score: after.score, img: after.img, mode: after.mode } : null,
+    feelBefore: vf.feelBefore || null, feelAfter: vf.feelAfter || null,
+    assessTotal: assess ? assess.total : null,
+    prescribed: (vf.prescribed || []).slice(),
+    comments,
+  };
+}
+
+function ReportView({ report }) {
+  return (
+    <div>
+      <div className="text-center">
+        <p className="brand-serif text-[10px] tracking-[.3em] text-moon-300">SLEEPY REPORT</p>
+        <h3 className="text-[16px] font-black text-cream-50 mt-0.5">本日の改善レポート</h3>
+        <p className="text-[10.5px] text-night-200">{fmtJP(report.date)}</p>
+      </div>
+
+      {(report.before || report.after) && (
+        <div className="card-deep p-3.5 mt-3">
+          <p className="text-[10.5px] font-black text-night-200 mb-2">📸 姿勢スコア（{report.after?.mode === 'front' ? '正面' : '側面'}）</p>
+          <div className="flex items-center justify-center gap-4">
+            <div className="text-center">
+              <p className="text-[9.5px] font-black text-[#f0968c]">BEFORE</p>
+              <p className="text-[24px] font-black text-night-100">{report.before ? report.before.score : '−'}</p>
+            </div>
+            <span className="text-moon-300 text-[20px] font-black">→</span>
+            <div className="text-center">
+              <p className="text-[9.5px] font-black text-[#4cc2ae]">AFTER</p>
+              <p className="text-[28px] font-black" style={{ color: report.after ? scoreLabel(report.after.score).color : C.night100 }}>{report.after ? report.after.score : '−'}</p>
+            </div>
+            {report.before && report.after && report.after.score > report.before.score &&
+              <span className="text-[12px] font-black text-[#4cc2ae]">+{report.after.score - report.before.score} 🎉</span>}
+          </div>
+        </div>
+      )}
+
+      {report.feelBefore && report.feelAfter && (
+        <div className="card-deep p-3.5 mt-2.5">
+          <p className="text-[10.5px] font-black text-night-200 mb-2">🖐️ ご自身の体感（10点満点）</p>
+          {FEEL_AXES.map(a => {
+            const b = report.feelBefore[a.id], af = report.feelAfter[a.id], d = af - b;
+            return (
+              <div key={a.id} className="flex items-center gap-2 py-1">
+                <span className="flex-1 text-[11.5px] font-bold text-cream-50">{a.emoji} {a.label}</span>
+                <span className="text-[11px] text-night-200">{b}</span>
+                <span className="text-night-300">→</span>
+                <span className="text-[13px] font-black" style={{ color: d > 0 ? '#4cc2ae' : C.night100 }}>{af}</span>
+                {d > 0 && <span className="text-[10px] font-black text-[#4cc2ae]">+{d}</span>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="card-deep p-3.5 mt-2.5">
+        <p className="text-[10.5px] font-black text-night-200 mb-1.5">🤖 AI分析コメント</p>
+        {report.comments.map((t, i) => (
+          <p key={i} className="text-[11.5px] text-night-100 leading-relaxed mb-1.5 last:mb-0">・{t}</p>
+        ))}
+      </div>
+
+      {report.prescribed.length > 0 && (
+        <div className="card-deep p-3.5 mt-2.5">
+          <p className="text-[10.5px] font-black text-night-200 mb-1.5">💊 本日のホームケア処方</p>
+          {report.prescribed.map(item => {
+            const s = STRETCH[item]; const p = PRODUCT[item];
+            return <p key={item} className="text-[11.5px] font-bold text-cream-50 py-0.5">{s ? `${s.emoji} ${s.name}` : p ? `${p.emoji} ${p.name}` : item}</p>;
+          })}
+        </div>
+      )}
+
+      <p className="brand-serif text-center text-[10.5px] tracking-[.2em] text-moon-300 mt-3.5">─ 睡眠から、人生を変える。─</p>
+    </div>
+  );
+}
+
+/* ============================================================
    SECTION 16: 来店ガイド（ご来店〜退店までの理想の導線）
    チェックイン → カウンセリング → 姿勢(前) → 施術 → 姿勢(後)
    → ストレッチ指導 → ご提案 → 次回案内・完了
    ============================================================ */
+function FeelSliders({ value, onChange }) {
+  const v = value || { light: 5, neck: 5, mood: 5 };
+  return (
+    <div className="card-deep p-3.5">
+      <p className="text-[10.5px] font-black text-night-200 mb-2">🖐️ いまの体感を10点満点で</p>
+      {FEEL_AXES.map(a => (
+        <div key={a.id} className="py-1.5">
+          <div className="flex justify-between text-[11px] font-bold text-cream-50">
+            <span>{a.emoji} {a.label}</span>
+            <span className="text-moon-300 font-black">{v[a.id]}</span>
+          </div>
+          <input type="range" min="1" max="10" step="1" value={v[a.id]} className="w-full accent-[#f6d97e]"
+            onChange={e => onChange(a.id, Number(e.target.value))} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function VisitFlowScreen() {
   const { state, update, back, nav } = useApp();
   const [checkin, setCheckin] = useState(false);
@@ -3057,106 +4037,177 @@ function VisitFlowScreen() {
   const step = vf ? vf.step : 0;
   const recs = useMemo(() => buildRecommendations(state), [state]);
   const recStretchIds = [...new Set(recs.flatMap(r => r.stretch))].slice(0, 3);
-  const recProductIds = [...new Set(recs.flatMap(r => r.product))].slice(0, 3);
+  const recProductIds = [...new Set(recs.flatMap(r => r.product))].filter(id => !PRODUCT[id]?.ticket).slice(0, 3);
   const logs7 = recentLogs(state, 7);
   const before = vf && state.posture.find(p => p.id === vf.beforeId);
   const after = vf && state.posture.find(p => p.id === vf.afterId);
   const remaining = ticketRemaining(state);
+  const quick = state.quickChecks[state.quickChecks.length - 1];
+  const assess = state.assessments[state.assessments.length - 1];
+  const { lv } = levelFromXp(state.soupy.xp);
+  const xpToday = (state.xpLog || []).filter(x => x.date === todayStr()).reduce((a, x) => a + x.amount, 0);
+  const sub = state.subscription && SUB_PLAN[state.subscription.planId];
+  const nextVisit = addDays(todayStr(), sub && sub.id === 'sub_std' ? 14 : sub && sub.id === 'sub_light' ? 28 : 14);
 
-  const setStep = (n) => update(st => { if (st.visitFlow) st.visitFlow.step = Math.max(st.visitFlow.step, n); });
+  const setStep = (n) => update(st => {
+    if (!st.visitFlow) st.visitFlow = { step: 0, startedAt: todayStr(), beforeId: null, afterId: null, prescribed: [], goalNote: '', feelBefore: null, feelAfter: null };
+    st.visitFlow.step = Math.max(st.visitFlow.step, n);
+  });
+  const setFeel = (key, axis, val) => update(st => {
+    if (!st.visitFlow) return;
+    st.visitFlow[key] = { ...(st.visitFlow[key] || { light: 5, neck: 5, mood: 5 }), [axis]: val };
+  });
   const togglePrescribe = (id) => update(st => {
     if (!st.visitFlow) return;
     const p = st.visitFlow.prescribed || [];
-    st.visitFlow.prescribed = p.includes(id) ? p.filter(x => x !== id) : [...p, id];
+    if (p.includes(id)) st.visitFlow.prescribed = p.filter(x => x !== id);
+    else if (p.length < 3) st.visitFlow.prescribed = [...p, id];
   });
 
   const complete = () => {
-    const summary = {
-      before: before ? before.score : null, after: after ? after.score : null,
-      prescribed: (vf.prescribed || []).slice(), remaining,
-    };
+    const report = buildVisitReport(state, vf);
     update(st => {
       const v = st.visits[st.visits.length - 1];
-      if (v && v.date === todayStr()) v.karte = summary;
+      if (v && v.date === todayStr()) v.karte = report;
+      if ((vf.prescribed || []).length) st.prescription = { items: vf.prescribed.slice(), date: todayStr(), until: addDays(todayStr(), 14) };
       st.visitFlow = null;
       gainXp(st, 30, '来店フロー完了');
     });
-    setCelebrate(summary);
+    setCelebrate(report);
   };
 
+  const NextBtn = ({ n, children }) => <Btn kind="primary" full onClick={() => setStep(n)}>{children || 'つぎへ ✓'}</Btn>;
+  const SkipLink = ({ n }) => <button onClick={() => setStep(n)} className="text-[11px] font-bold text-night-300 mt-2">今回はスキップ →</button>;
+
   const STEPS = [
-    { icon: '🚪', title: 'ご来店・チェックイン', desc: '会員証を見せて、回数券でチェックイン',
+    { icon: '📋', title: '来店前AI診断', desc: 'かんたん8問でねむりの現在地を可視化',
       content: (
         <div>
-          <p className="text-[11.5px] text-night-100 leading-relaxed mb-3">ようこそ！受付でこの画面をお見せください。チェックインで <span className="text-moon-300 font-black">+50 XP</span>、スーピーくんがぐんと育ちます。</p>
-          <Btn kind="moon" full onClick={() => setCheckin(true)}>🏥 チェックインする</Btn>
-        </div>) },
-    { icon: '🗣️', title: 'カウンセリング', desc: '最近のねむりをスタッフと確認',
-      content: (
-        <div>
-          {logs7.length ? (
-            <div className="card-deep p-3.5 mb-3">
-              <p className="text-[10.5px] font-black text-moon-300 mb-2">この7日間のねむり（スタッフに見せてね）</p>
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div><p className="text-[20px] font-black text-cream-50">{Math.round(avg(logs7.map(l => l.score)))}</p><p className="text-[9px] text-night-200">平均スコア</p></div>
-                <div><p className="text-[20px] font-black text-cream-50">{avg(logs7.map(l => sleepHours(l.bed, l.wake))).toFixed(1)}<span className="text-[10px]">h</span></p><p className="text-[9px] text-night-200">平均時間</p></div>
-                <div><p className="text-[20px] font-black text-cream-50">{avg(logs7.map(l => l.awakenings || 0)).toFixed(1)}<span className="text-[10px]">回</span></p><p className="text-[9px] text-night-200">中途覚醒</p></div>
+          {quick
+            ? <div className="card-deep p-3 mb-3 flex items-center gap-3">
+                <span className="text-[22px] font-black text-moon-300">{quick.score}<span className="text-[10px]">点</span></span>
+                <p className="text-[11.5px] font-bold text-night-100">{quick.emoji} {quick.label}<span className="block text-[9.5px] text-night-300">{fmtMD(quick.date)} 診断ずみ</span></p>
               </div>
-              {recs[0] && <p className="text-[10.5px] text-night-100 mt-2.5 leading-relaxed">💡 気になるポイント：{recs[0].issue.label}（{recs[0].issue.evidence}）</p>}
-            </div>
-          ) : <p className="text-[11.5px] text-night-200 mb-3">睡眠記録はまだありません。今日の状態を直接スタッフにお伝えください。</p>}
-          <Btn kind="primary" full onClick={() => setStep(2)}>確認できた ✓</Btn>
-        </div>) },
-    { icon: '📸', title: '姿勢チェック（施術前）', desc: 'いまのからだを数値で記録',
-      content: (
-        <div>
-          {before
-            ? <div className="flex items-center gap-3 mb-3 card-deep p-3">
-                {before.img && <img src={before.img} alt="" className="w-10 h-13 rounded-lg border border-night-400/40" style={{ height: 52 }} />}
-                <p className="text-[12px] font-bold text-night-100">施術前スコア <span className="text-[18px] font-black" style={{ color: scoreLabel(before.score).color }}>{before.score}点</span></p>
-              </div>
-            : <p className="text-[11.5px] text-night-100 leading-relaxed mb-3">施術の効果を実感するために、まず「いま」を記録しましょう。</p>}
+            : <p className="text-[11.5px] text-night-100 leading-relaxed mb-3">本来はご来店前にLINEで行う診断です。まだの方はここで3分でどうぞ。</p>}
           <div className="flex flex-col gap-2">
-            <Btn kind="moon" full onClick={() => nav('posture', { phase: 'before', from: 'visit' })}>📸 姿勢分析をする</Btn>
-            {before ? <Btn kind="primary" full onClick={() => setStep(3)}>つぎへ ✓</Btn>
-              : <button onClick={() => setStep(3)} className="text-[11px] font-bold text-night-300">今回はスキップ →</button>}
+            {!quick && <Btn kind="moon" full onClick={() => nav('quick')}>📋 かんたん診断をする（3分）</Btn>}
+            <NextBtn n={1}>チェックインへすすむ ✓</NextBtn>
           </div>
         </div>) },
-    { icon: '💆', title: '施術タイム', desc: '呼吸に合わせて、ゆったりリラックス',
+    { icon: '🚪', title: '来店・チェックイン', desc: '会員証を提示して回数券でチェックイン',
+      content: (
+        <div>
+          <p className="text-[11.5px] text-night-100 leading-relaxed mb-3">ようこそ！受付でこの画面をお見せください。チェックインで <span className="text-moon-300 font-black">+50 XP</span>。</p>
+          <Btn kind="moon" full onClick={() => setCheckin(true)}>🏥 チェックインする</Btn>
+        </div>) },
+    { icon: '🔬', title: '本診断（30問）', desc: 'AIが5つの角度から徹底分析',
+      content: (
+        <div>
+          {assess
+            ? <div className="card-deep p-3 mb-3 flex items-center gap-3">
+                <span className="text-[22px] font-black text-moon-300">{assess.total}<span className="text-[10px]">点</span></span>
+                <p className="text-[11.5px] font-bold text-night-100">整いランク{assess.level.rank}<span className="block text-[9.5px] text-night-300">{fmtMD(assess.date)} 診断ずみ</span></p>
+              </div>
+            : <p className="text-[11.5px] text-night-100 leading-relaxed mb-3">30問・約8〜10分。眠れない原因を「ねむり・リズム・こころ・からだ・環境」の5方向から特定します。</p>}
+          <div className="flex flex-col gap-2">
+            <Btn kind="moon" full onClick={() => nav('assess')}>🔬 {assess ? '本診断をやりなおす' : '本診断をはじめる'}</Btn>
+            {assess && <NextBtn n={3}>この結果ですすむ ✓</NextBtn>}
+          </div>
+          {!assess && <SkipLink n={3} />}
+        </div>) },
+    { icon: '🎬', title: '教育コンテンツ視聴', desc: '睡眠の重要性と改善事例を知る',
+      content: (
+        <div>
+          <div className="flex flex-col gap-1.5 mb-3">
+            {SLIDES.map(s => (
+              <button key={s.id} onClick={() => nav('slides', { id: s.id })} className="btn-press card-deep p-3 flex items-center gap-2.5 text-left">
+                <span className="text-[18px]">{s.emoji}</span>
+                <span className="flex-1">
+                  <span className="block text-[12px] font-black text-cream-50">{s.title}</span>
+                  <span className="block text-[9.5px] text-night-300">約{s.mins}分・スライド{s.pages.length}枚</span>
+                </span>
+                {state.slidesDone.includes(s.id)
+                  ? <span className="text-[10px] font-black text-[#4cc2ae]">視聴ずみ✓</span>
+                  : <span className="text-[10px] font-black text-moon-300">+10 XP</span>}
+              </button>
+            ))}
+          </div>
+          <NextBtn n={4} />
+        </div>) },
+    { icon: '🗣️', title: 'カウンセリング', desc: 'AI分析結果をもとに悩み・目標を共有',
+      content: (
+        <div>
+          <div className="card-deep p-3.5 mb-2.5">
+            <p className="text-[10.5px] font-black text-moon-300 mb-2">スタッフに見せる分析サマリー</p>
+            <div className="grid grid-cols-3 gap-2 text-center mb-2">
+              <div><p className="text-[18px] font-black text-cream-50">{assess ? assess.total : '−'}</p><p className="text-[8.5px] text-night-200">本診断</p></div>
+              <div><p className="text-[18px] font-black text-cream-50">{logs7.length ? Math.round(avg(logs7.map(l => l.score))) : '−'}</p><p className="text-[8.5px] text-night-200">睡眠スコア平均</p></div>
+              <div><p className="text-[18px] font-black text-cream-50">{logs7.length ? avg(logs7.map(l => sleepHours(l.bed, l.wake))).toFixed(1) : '−'}<span className="text-[9px]">h</span></p><p className="text-[8.5px] text-night-200">平均時間</p></div>
+            </div>
+            {assess && assess.worst.length > 0 && (
+              <p className="text-[10.5px] text-night-100">重点：{assess.worst.map(id => { const c = ASSESS_CATS.find(x => x.id === id); return `${c.emoji}${c.name}(${assess.cats[id]}点)`; }).join('・')}</p>
+            )}
+            {recs[0] && <p className="text-[10.5px] text-night-100 mt-1">💡 {recs[0].issue.label}（{recs[0].issue.evidence}）</p>}
+          </div>
+          <label className="block mb-3">
+            <span className="text-[11px] font-bold text-night-100">今日いちばん相談したいこと・目標</span>
+            <textarea defaultValue={vf?.goalNote || ''} rows={2} placeholder="例）夜中に2回起きるのをなくしたい"
+              onBlur={e => update(st => { if (st.visitFlow) st.visitFlow.goalNote = e.target.value; })}
+              className="mt-1 w-full bg-night-600 border border-night-400/50 rounded-xl px-3 py-2.5 text-[12.5px] font-bold text-cream-50 outline-none focus:border-moon-400" />
+          </label>
+          <NextBtn n={5}>共有できた ✓</NextBtn>
+        </div>) },
+    { icon: '🛏️', title: '体験（施術前）', desc: '寝るだけ体験＋アロマで脳をリラックス',
+      content: (
+        <div>
+          <p className="text-[11.5px] text-night-100 leading-relaxed mb-2.5">まずはベッドで力を抜いて、アロマの香りで脳をおやすみモードへ。<br />そのあと「いまのからだ」を記録します。</p>
+          <FeelSliders value={vf?.feelBefore} onChange={(a, v) => setFeel('feelBefore', a, v)} />
+          <div className="mt-2.5 flex flex-col gap-2">
+            <Btn kind="moon" full onClick={() => nav('posture', { phase: 'before', from: 'visit' })}>📸 姿勢チェック（施術前）</Btn>
+            {before && <p className="text-center text-[11px] font-bold text-night-100">施術前スコア <span className="text-[15px] font-black" style={{ color: scoreLabel(before.score).color }}>{before.score}点</span> ✓</p>}
+            <NextBtn n={6}>施術へすすむ ✓</NextBtn>
+          </div>
+        </div>) },
+    { icon: '💆', title: '施術', desc: 'オーダーメイド施術で根本改善',
       content: (
         <div className="text-center">
-          <p className="text-[11.5px] text-night-100 leading-relaxed mb-3">施術中は、ゆっくり長く息を吐くと副交感神経が働いて効果アップ。まるい光に合わせて呼吸してみてね。</p>
+          <p className="text-[11.5px] text-night-100 leading-relaxed mb-3">ゆっくり長く息を吐くと副交感神経が働いて効果アップ。まるい光に合わせて呼吸してみてね。</p>
           <div className="relative mx-auto w-[130px] h-[130px] mb-3">
             <div className="absolute inset-0 rounded-full" style={{ background: 'radial-gradient(circle,#f6d97e55,#f6d97e11 60%,transparent 70%)', animation: 'breath-guide 8s ease-in-out infinite' }} />
             <div className="absolute inset-[30px] rounded-full border-2 border-moon-400/60" style={{ animation: 'breath-guide 8s ease-in-out infinite' }} />
             <div className="absolute inset-0 flex items-center justify-center text-[11px] font-black text-moon-300">すう…はく…</div>
           </div>
-          <Btn kind="primary" full onClick={() => setStep(4)}>施術がおわった ✓</Btn>
+          <NextBtn n={7}>施術がおわった ✓</NextBtn>
         </div>) },
-    { icon: '✨', title: '姿勢チェック（施術後）', desc: '変化をその場で体感！',
+    { icon: '✨', title: '効果の可視化', desc: 'BEFORE / AFTER で変化を体感',
       content: (
         <div>
-          {after
-            ? <div className="mb-3">
-                <div className="card-deep p-3 flex items-center justify-center gap-4">
-                  {before && <span className="text-[16px] font-black text-night-200">{before.score}点</span>}
-                  {before && <span className="text-moon-300 font-black">→</span>}
-                  <span className="text-[22px] font-black" style={{ color: scoreLabel(after.score).color }}>{after.score}点</span>
-                  {before && after.score > before.score && <span className="text-[11px] font-black text-[#4cc2ae]">+{after.score - before.score} 🎉</span>}
-                </div>
+          <div className="flex flex-col gap-2 mb-2.5">
+            <Btn kind="moon" full onClick={() => nav('posture', { phase: 'after', from: 'visit' })}>📸 姿勢チェック（施術後）</Btn>
+            {before && after && (
+              <div className="card-deep p-3 flex items-center justify-center gap-4">
+                <span className="text-[15px] font-black text-night-200">{before.score}点</span>
+                <span className="text-moon-300 font-black">→</span>
+                <span className="text-[21px] font-black" style={{ color: scoreLabel(after.score).color }}>{after.score}点</span>
+                {after.score > before.score && <span className="text-[11px] font-black text-[#4cc2ae]">+{after.score - before.score} 🎉</span>}
               </div>
-            : <p className="text-[11.5px] text-night-100 leading-relaxed mb-3">施術後のからだをもう一度分析して、Before/Afterをくらべてみましょう。</p>}
-          <div className="flex flex-col gap-2">
-            <Btn kind="moon" full onClick={() => nav('posture', { phase: 'after', from: 'visit' })}>📸 施術後の姿勢分析</Btn>
-            {before && after && <Btn kind="ghost" full onClick={() => nav('postureCompare')}>🔄 Before/Afterをくらべる</Btn>}
-            {after ? <Btn kind="primary" full onClick={() => setStep(5)}>つぎへ ✓</Btn>
-              : <button onClick={() => setStep(5)} className="text-[11px] font-bold text-night-300">今回はスキップ →</button>}
+            )}
+            {before && after && <Btn kind="ghost" full onClick={() => nav('postureCompare')}>🔄 くわしくくらべる</Btn>}
           </div>
+          <FeelSliders value={vf?.feelAfter} onChange={(a, v) => setFeel('feelAfter', a, v)} />
+          <div className="mt-2.5"><NextBtn n={8} /></div>
         </div>) },
-    { icon: '🤸', title: 'ストレッチ指導', desc: 'おうち用メニューを処方してもらう',
+    { icon: '🤖', title: 'AI再評価・レポート', desc: '本日の変化を1枚のレポートに',
       content: (
         <div>
-          <p className="text-[11.5px] text-night-100 leading-relaxed mb-2.5">今日のあなたに合うおうちストレッチ。スタッフと一緒にやり方を確認して、チェックを入れてね。</p>
+          {vf && <div className="card-deep p-4 mb-3"><ReportView report={buildVisitReport(state, vf)} /></div>}
+          <p className="text-[10.5px] text-night-200 mb-2.5">レポートは完了時にカルテへ保存され、会員証の来店履歴からいつでも見られます。</p>
+          <NextBtn n={9} />
+        </div>) },
+    { icon: '💊', title: 'ホームケア処方', desc: 'AIが1〜3点にしぼって提案',
+      content: (
+        <div>
+          <p className="text-[11.5px] text-night-100 leading-relaxed mb-2.5">がんばりすぎは続きません。今日のあなたに効く<span className="font-black text-moon-300">最大3つ</span>だけ選びましょう（{(vf?.prescribed || []).length}/3）。</p>
           <div className="flex flex-col gap-1.5 mb-3">
             {recStretchIds.map(id => {
               const s = STRETCH[id];
@@ -3173,17 +4224,31 @@ function VisitFlowScreen() {
                 </button>
               );
             })}
+            {recProductIds.slice(0, 2).map(id => {
+              const p = PRODUCT[id];
+              const on = (vf?.prescribed || []).includes(id);
+              return (
+                <button key={id} onClick={() => togglePrescribe(id)}
+                  className={`btn-press text-left p-3 rounded-xl border flex items-center gap-2.5 ${on ? 'border-moon-400 bg-moon-400/10' : 'border-night-400/40 bg-night-600'}`}>
+                  <span className="text-[18px]">{p.emoji}</span>
+                  <span className="flex-1">
+                    <span className="block text-[12px] font-black text-cream-50">{p.name}</span>
+                    <span className="block text-[9.5px] text-night-200">習慣グッズ・{yen(p.price)}</span>
+                  </span>
+                  <span className={`text-[16px] ${on ? '' : 'opacity-25'}`}>✅</span>
+                </button>
+              );
+            })}
           </div>
-          <Btn kind="primary" full onClick={() => setStep(6)}>処方をうけとった ✓</Btn>
+          <NextBtn n={10}>処方をうけとった ✓</NextBtn>
         </div>) },
-    { icon: '🛍️', title: '本日のご提案', desc: 'あなたの睡眠に合うグッズ',
+    { icon: '🛍️', title: '商品体験・ご提案', desc: 'ショーケースで実物をおためし',
       content: (
         <div>
-          <p className="text-[11.5px] text-night-100 leading-relaxed mb-2.5">分析結果から、おうちの睡眠環境づくりに役立つものをご提案します。気になったらスタッフへ。</p>
+          <p className="text-[11.5px] text-night-100 leading-relaxed mb-2.5">分析結果に合うグッズを、その場でさわって体験できます。気になったらスタッフへ。</p>
           <div className="flex flex-col gap-1.5 mb-3">
             {recProductIds.map(id => {
               const p = PRODUCT[id];
-              if (!p) return null;
               return (
                 <button key={id} onClick={() => nav('product', { id })} className="btn-press card-deep p-3 flex items-center gap-2.5 text-left">
                   <span className="text-[20px]">{p.emoji}</span>
@@ -3196,16 +4261,47 @@ function VisitFlowScreen() {
               );
             })}
           </div>
-          <Btn kind="primary" full onClick={() => setStep(7)}>確認した ✓</Btn>
+          <NextBtn n={11} />
         </div>) },
-    { icon: '📅', title: '次回のご案内・おわり', desc: 'お会計と次回予約',
+    { icon: '📅', title: 'プラン・サブスク案内', desc: '通いやすい定額プランのご紹介',
       content: (
         <div>
-          <div className="card-deep p-3.5 mb-3">
-            <p className="text-[12px] font-bold text-night-100">🎫 回数券ざんだか <span className="text-[18px] font-black text-moon-300">{remaining}回</span></p>
-            <p className="text-[11px] text-night-200 mt-1.5 leading-relaxed">整えたからだは約2〜3週間かけて少しずつ戻ります。次回は <span className="text-cream-50 font-black">{fmtJP(addDays(todayStr(), 14))}</span> ごろがおすすめ。受付でご予約ください。</p>
+          {sub
+            ? <div className="card-deep p-3.5 mb-3"><p className="text-[12px] font-bold text-cream-50">{sub.emoji} <span className="font-black">{sub.name}</span> にご加入中です。次回もプランでご案内します。</p></div>
+            : <div className="flex flex-col gap-1.5 mb-3">
+                {SUB_PLANS.map(p => (
+                  <div key={p.id} className="card-deep p-3 flex items-center gap-2.5">
+                    <span className="text-[18px]">{p.emoji}</span>
+                    <span className="flex-1">
+                      <span className="block text-[12px] font-black text-cream-50">{p.name}{p.popular && <span className="ml-1.5 text-[8.5px] text-night-900 bg-moon-400 rounded-full px-1.5 py-0.5">人気No.1</span>}</span>
+                      <span className="block text-[9.5px] text-night-200">{p.cadence}・{yen(p.price)}/月</span>
+                    </span>
+                  </div>
+                ))}
+              </div>}
+          <div className="flex flex-col gap-2">
+            <Btn kind="ghost" full onClick={() => nav('shop', { view: 'subs' })}>プランをくわしく見る</Btn>
+            <NextBtn n={12} />
           </div>
-          <p className="text-[11.5px] text-night-100 leading-relaxed mb-3">おうちでは「睡眠記録」と「処方ストレッチ」を続けて、次回いっしょに変化を見ましょう。</p>
+        </div>) },
+    { icon: '🛒', title: 'EC登録・その場で購入', desc: 'QRでポチッ。在庫なし・持ち帰り不要',
+      content: (
+        <div>
+          <p className="text-[11.5px] text-night-100 leading-relaxed mb-2.5">お会計はアプリのショップから。ご自宅へ配送 or 次回来店時のお渡しなので、手ぶらで帰れます。{cartCount(state) > 0 && <span className="font-black text-moon-300">カートに{cartCount(state)}点入っています。</span>}</p>
+          <div className="flex flex-col gap-2">
+            <Btn kind="moon" full onClick={() => nav(cartCount(state) > 0 ? 'cart' : 'shop')}>🛒 {cartCount(state) > 0 ? 'カートを確認して購入' : 'ショップを見る'}</Btn>
+            <NextBtn n={13}>購入した／今日は見送る ✓</NextBtn>
+          </div>
+        </div>) },
+    { icon: '🌙', title: '次回のご案内・おわり', desc: 'データ蓄積 → 来店頻度を最適化',
+      content: (
+        <div>
+          <div className="card-deep p-3.5 mb-3 text-[11.5px] text-night-100 space-y-1.5">
+            <p>🌟 本日ゲットしたXP <span className="font-black text-moon-300">+{xpToday}</span>（スーピーくん Lv.{lv}）</p>
+            <p>🎫 回数券ざんだか <span className="font-black text-moon-300">{remaining}回</span></p>
+            <p>📅 次回のおすすめ <span className="font-black text-cream-50">{fmtJP(nextVisit)}</span> ごろ{sub ? `（${sub.name}）` : ''}</p>
+          </div>
+          <p className="text-[11.5px] text-night-100 leading-relaxed mb-3">おうちでは「睡眠記録」と「処方ホームケア」を続けて、次の来店でまた変化を見ましょう。データがたまるほど、AIの提案はかしこくなります。</p>
           <Btn kind="moon" full onClick={complete}>🌙 本日はおつかれさまでした（完了）</Btn>
         </div>) },
   ];
@@ -3217,10 +4313,10 @@ function VisitFlowScreen() {
         {!vf && (
           <NightSky className="rounded-3xl border border-night-500/60 mb-4">
             <div className="p-4 flex items-center gap-3">
-              <Soupy size={80} mood="happy" showZzz={false} />
+              <Soupy size={84} mood="happy" showZzz={false} scene="moon" />
               <div>
                 <p className="text-[14px] font-black text-cream-50 leading-snug">ご来店から退店まで、ぼくがご案内するよ！</p>
-                <p className="text-[10.5px] text-night-100 mt-1">チェックインするとガイドがはじまります</p>
+                <p className="text-[10.5px] text-night-100 mt-1">全14ステップ。チェックインからはじまります</p>
               </div>
             </div>
           </NightSky>
@@ -3252,25 +4348,21 @@ function VisitFlowScreen() {
 
       <Modal open={!!celebrate} onClose={() => { setCelebrate(null); back(); }}>
         {celebrate && (
-          <div className="text-center py-2">
-            <div className="relative inline-block">
-              <Soupy size={150} mood="excited" showZzz={false} />
-              {Array.from({ length: 10 }).map((_, i) => (
-                <span key={i} className="absolute left-1/2 top-1/2 text-[16px]" style={{
-                  '--tx': `${Math.cos(i / 10 * Math.PI * 2) * 85}px`, '--ty': `${Math.sin(i / 10 * Math.PI * 2) * 85}px`,
-                  animation: `star-burst .9s ease-out ${i * 0.06}s both`,
-                }}>⭐</span>
-              ))}
+          <div>
+            <div className="text-center">
+              <div className="relative inline-block">
+                <Soupy size={130} mood="excited" showZzz={false} />
+                {Array.from({ length: 10 }).map((_, i) => (
+                  <span key={i} className="absolute left-1/2 top-1/2 text-[16px]" style={{
+                    '--tx': `${Math.cos(i / 10 * Math.PI * 2) * 85}px`, '--ty': `${Math.sin(i / 10 * Math.PI * 2) * 85}px`,
+                    animation: `star-burst .9s ease-out ${i * 0.06}s both`,
+                  }}>⭐</span>
+                ))}
+              </div>
+              <h3 className="text-[16px] font-black text-cream-50">本日もありがとうございました！</h3>
             </div>
-            <h3 className="text-[17px] font-black text-cream-50">本日もありがとうございました！</h3>
-            <div className="card-deep p-3.5 mt-3 text-left text-[11.5px] text-night-100 space-y-1">
-              {celebrate.before != null && celebrate.after != null &&
-                <p>📸 姿勢スコア {celebrate.before}点 → <span className="font-black text-[#4cc2ae]">{celebrate.after}点</span></p>}
-              <p>🤸 処方ストレッチ {celebrate.prescribed.length}こ（ケアタブから見られます）</p>
-              <p>🎫 回数券のこり {celebrate.remaining}回</p>
-              <p>🌟 +30 XP（来店フロー完了）</p>
-            </div>
-            <p className="text-[11px] text-night-200 mt-3">今夜の睡眠記録で、施術後のねむりの変化を見てみてね🌙</p>
+            <div className="card p-4 mt-3"><ReportView report={celebrate} /></div>
+            <p className="text-[11px] text-night-200 mt-3 text-center">今夜の睡眠記録で、施術後のねむりの変化を見てみてね🌙</p>
             <div className="mt-4"><Btn kind="moon" full onClick={() => { setCelebrate(null); back(); }}>おわる</Btn></div>
           </div>
         )}
@@ -3299,11 +4391,11 @@ function Onboarding({ onStart }) {
       <div className="mx-auto max-w-[430px] min-h-screen flex flex-col px-6 py-8">
         {page === 0 && (
           <div className="flex-1 flex flex-col items-center justify-center text-center anim-pop">
-            <img src="assets/logo.jpg" alt="睡眠整体サロン SLEEPY" className="w-40 rounded-3xl border border-night-400/40 shadow-2xl shadow-black/40"
-              onError={e => { e.currentTarget.style.display = 'none'; }} />
-            <div className="-mt-2"><Soupy size={170} mood="sleep" /></div>
-            <h1 className="text-[22px] font-black text-cream-50 tracking-wide">睡眠整体サロン SLEEPY</h1>
-            <p className="text-[12px] text-night-100 mt-1 font-bold">こうしき快眠パートナーアプリ</p>
+            <p className="brand-serif text-[11px] tracking-[.35em] text-moon-300">株式会社 SLEEPY</p>
+            <h1 className="brand-serif text-[34px] tracking-[.3em] text-cream-50 mt-1">SLEEPY</h1>
+            <p className="brand-serif text-[13px] text-moon-300 mt-1 tracking-widest">─ 睡眠から、人生を変える。─</p>
+            <div className="mt-2"><Soupy size={196} mood="sleep" scene="moon" /></div>
+            <p className="text-[12px] text-night-100 mt-2 font-bold">睡眠整体サロン SLEEPY こうしき快眠パートナーアプリ</p>
             <div className="mt-5 space-y-1.5 text-[11.5px] text-night-100 font-bold">
               <p>🌙 ねむりを記録して、自律神経を見える化</p>
               <p>📸 施術前後の姿勢の変化を体感</p>
@@ -3376,13 +4468,27 @@ function SettingsScreen() {
           <Btn kind="danger" full onClick={() => setConfirm('reset')}>🗑️ すべてのデータを削除する</Btn>
         </div>
 
-        <SectionTitle icon="🏥" title="このアプリについて" />
-        <div className="card p-4 text-center">
-          <img src="assets/logo.jpg" alt="睡眠整体サロン SLEEPY" className="w-28 mx-auto rounded-2xl border border-night-400/40"
+        <SectionTitle icon="🏥" title="SLEEPYについて" />
+        <div className="card p-5 text-center">
+          <p className="brand-serif text-[10px] tracking-[.35em] text-moon-300">株式会社 SLEEPY</p>
+          <p className="brand-serif text-[15px] tracking-[.15em] text-cream-50 mt-1.5">睡眠から、人生を変える。</p>
+          <img src="assets/logo.jpg" alt="睡眠整体サロン SLEEPY" className="w-28 mx-auto rounded-2xl border border-night-400/40 mt-4"
             onError={e => { e.currentTarget.style.display = 'none'; }} />
-          <p className="text-[13px] font-black text-cream-50 mt-3">睡眠整体サロン SLEEPY</p>
-          <p className="text-[10.5px] text-night-200 mt-0.5">Produced by KADOMORI</p>
-          <p className="text-[10px] text-night-300 mt-2 leading-relaxed">公式快眠パートナーアプリ v1.0<br />マスコット：スーピーくん 🐑</p>
+          <div className="text-left mt-4 space-y-3">
+            {[MVV.purpose, MVV.mission, MVV.vision].map((m, i) => (
+              <div key={i}>
+                <p className="text-[9.5px] font-black tracking-widest text-moon-300">{m.name}</p>
+                <p className="text-[11.5px] text-night-100 leading-relaxed mt-0.5">{m.text}</p>
+              </div>
+            ))}
+            <div>
+              <p className="text-[9.5px] font-black tracking-widest text-moon-300">VALUE｜大切にする価値観</p>
+              <div className="flex flex-wrap gap-1 mt-1.5">
+                {MVV.values.map((v, i) => <span key={i} className="text-[9.5px] font-bold text-night-100 bg-night-500/60 rounded-full px-2 py-1">{v}</span>)}
+              </div>
+            </div>
+          </div>
+          <p className="text-[10px] text-night-300 mt-4 leading-relaxed">公式快眠パートナーアプリ v2.0<br />マスコット：スーピーくん 🐑</p>
         </div>
       </div>
 
@@ -3529,7 +4635,7 @@ function App() {
     case 'sleep': screen = <SleepScreen route={route} />; break;
     case 'soupy': screen = <SoupyScreen />; break;
     case 'care': screen = <CareScreen route={route} />; break;
-    case 'shop': screen = <ShopScreen />; break;
+    case 'shop': screen = <ShopScreen route={route} />; break;
     case 'stretchPlay': screen = <StretchPlayScreen route={route} />; break;
     case 'article': screen = <ArticleScreen route={route} />; break;
     case 'product': screen = <ProductScreen route={route} />; break;
@@ -3539,6 +4645,10 @@ function App() {
     case 'postureCompare': screen = <PostureCompareScreen />; break;
     case 'visit': screen = <VisitFlowScreen />; break;
     case 'settings': screen = <SettingsScreen />; break;
+    case 'quick': screen = <QuickCheckScreen route={route} />; break;
+    case 'assess': screen = <AssessScreen route={route} />; break;
+    case 'slides': screen = <SlidePlayerScreen route={route} />; break;
+    case 'sounds': screen = <SoundsScreen />; break;
     default: screen = <HomeScreen />;
   }
 
