@@ -1,1 +1,3560 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d1424">
+<title>SLEEPY | 睡眠整体サロン 公式アプリ</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='48' fill='%230d1424'/%3E%3Cpath d='M63 20a34 34 0 1 0 17 44A28 28 0 0 1 63 20z' fill='%23f6d97e'/%3E%3C/svg%3E">
 
+<!-- ============================================================
+     睡眠整体サロン SLEEPY 公式 顧客向けアプリ（スタンドアロン版）
+     このHTMLファイル1枚をブラウザで開くだけで動作します（サーバー不要）。
+     データはこの端末の localStorage に保存されます。
+     ・スーピーくん（ロゴの羊キャラクター）育成
+     ・睡眠記録 / 睡眠スコア / 自律神経バランス
+     ・行動と自律神経の教育コンテンツ / クイズ
+     ・ストレッチ指導（ガイド付きタイマー）
+     ・ショップ（物販・回数券のご提案）
+     ・回数券残高 / 会員証 / 来店チェックイン
+     ・姿勢分析（MediaPipe Pose）施術前後のBefore/After比較
+     ・来店から退店までの導線ガイド（来店モード）
+     ============================================================ -->
+
+<!-- Google Fonts（読めない環境ではシステムフォントに自動フォールバック） -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700;900&family=Noto+Sans+JP:wght@400;500;700;800&display=swap">
+
+<!-- ランタイムは vendor/ に同梱（オフラインでも動作）
+     Tailwind CDN 3.4.16 / React 18 UMD / Babel Standalone 7.29.7 -->
+<script src="vendor/tailwind.js"></script>
+<script src="vendor/react.production.min.js"></script>
+<script src="vendor/react-dom.production.min.js"></script>
+<script src="vendor/babel.min.js"></script>
+
+<!-- MediaPipe Pose は姿勢分析の開始時に動的読込 -->
+
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        night: { 950:'#090e1c', 900:'#0d1424', 800:'#131c31', 700:'#1a2440', 600:'#222e4c', 500:'#2b3a5e', 400:'#3c4c74', 300:'#5b6b94', 200:'#8b96b8', 100:'#c7cede', 50:'#eef1f8' },
+        cream: { 50:'#fdfaf2', 100:'#faf3e3', 200:'#f3e7c9', 300:'#e8d5a7', 400:'#d9bd7f' },
+        moon:  { 300:'#f9e6a8', 400:'#f6d97e', 500:'#eec25a' },
+        wool:  '#faf3e3',
+        choco: { DEFAULT:'#7a5236', dark:'#5f3f28', light:'#a97c52' },
+        blush: '#f5b0a0',
+        cgold: '#bd861a', cperi: '#6d82ec', csymp: '#df5346', cpara: '#25a08c',
+      },
+      fontFamily: {
+        maru: ['"Zen Maru Gothic"', '"Noto Sans JP"', '"Hiragino Maru Gothic ProN"', 'sans-serif'],
+        sans: ['"Noto Sans JP"', '"Hiragino Sans"', 'sans-serif'],
+      },
+    },
+  },
+};
+</script>
+
+<style>
+  * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { font-family: "Zen Maru Gothic", "Noto Sans JP", sans-serif; margin: 0; background: #090e1c; color: #eef1f8; }
+  ::-webkit-scrollbar { width: 0; height: 0; }
+  input, select, textarea, button { font-family: inherit; }
+  input[type="time"] { color-scheme: dark; }
+
+  /* ---- アニメーション ---- */
+  @keyframes twinkle { 0%,100% { opacity:.25; transform:scale(.8);} 50% { opacity:1; transform:scale(1.15);} }
+  @keyframes floaty { 0%,100% { transform:translateY(0);} 50% { transform:translateY(-7px);} }
+  @keyframes breathe { 0%,100% { transform:scaleY(1) scaleX(1);} 50% { transform:scaleY(1.025) scaleX(1.012);} }
+  @keyframes zzz-rise { 0% { opacity:0; transform:translate(0,6px) scale(.5) rotate(-6deg);} 25% { opacity:1;} 100% { opacity:0; transform:translate(14px,-34px) scale(1.15) rotate(10deg);} }
+  @keyframes pop-in { 0% { opacity:0; transform:scale(.6);} 70% { transform:scale(1.06);} 100% { opacity:1; transform:scale(1);} }
+  @keyframes slide-up { 0% { opacity:0; transform:translateY(18px);} 100% { opacity:1; transform:translateY(0);} }
+  @keyframes soupy-bounce { 0%,100% { transform:translateY(0) scale(1,1);} 30% { transform:translateY(2px) scale(1.06,.92);} 60% { transform:translateY(-12px) scale(.96,1.06);} 80% { transform:translateY(1px) scale(1.03,.97);} }
+  @keyframes heart-rise { 0% { opacity:0; transform:translateY(4px) scale(.4);} 25% { opacity:1;} 100% { opacity:0; transform:translateY(-46px) scale(1.2);} }
+  @keyframes moon-pulse { 0%,100% { filter:drop-shadow(0 0 3px rgba(246,217,126,.55));} 50% { filter:drop-shadow(0 0 10px rgba(246,217,126,.95));} }
+  @keyframes wiggle { 0%,100% { transform:rotate(0);} 25% { transform:rotate(-4deg);} 75% { transform:rotate(4deg);} }
+  @keyframes shimmer { 0% { background-position:100% 50%;} 100% { background-position:0 50%;} }
+  @keyframes breath-guide { 0%,10% { transform:scale(.62); } 45%,55% { transform:scale(1); } 90%,100% { transform:scale(.62); } }
+  @keyframes star-burst { 0% { opacity:1; transform:translate(0,0) scale(.4) rotate(0);} 100% { opacity:0; transform:translate(var(--tx), var(--ty)) scale(1) rotate(180deg);} }
+  @keyframes spin-slow { to { transform:rotate(360deg);} }
+
+  .anim-floaty { animation: floaty 3.4s ease-in-out infinite; }
+  .anim-pop { animation: pop-in .35s cubic-bezier(.2,1.4,.4,1) both; }
+  .anim-slide-up { animation: slide-up .4s ease both; }
+  .anim-wiggle { animation: wiggle 1.6s ease-in-out infinite; }
+  .soupy-tap-bounce { animation: soupy-bounce .7s cubic-bezier(.3,1.6,.4,1) 1; }
+
+  .star { position:absolute; border-radius:9999px; background:#f9e6a8; animation: twinkle 3s ease-in-out infinite; }
+
+  /* トースト */
+  #toast-root { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 9999; display:flex; flex-direction:column; gap:8px; pointer-events:none; width:min(92vw, 400px); }
+  .toast { pointer-events:auto; padding:11px 16px; border-radius:14px; color:#0d1424; font-size:13px; font-weight:700; box-shadow:0 10px 30px rgba(0,0,0,.45); animation: pop-in .3s cubic-bezier(.2,1.4,.4,1); display:flex; align-items:center; gap:8px; font-family:"Zen Maru Gothic","Noto Sans JP",sans-serif; }
+  .toast-info { background:#faf3e3; }
+  .toast-xp { background:linear-gradient(105deg,#f6d97e,#f3e7c9); }
+  .toast-err { background:#f5b0a0; }
+
+  .no-scrollbar::-webkit-scrollbar { display:none; }
+  .no-scrollbar { -ms-overflow-style:none; scrollbar-width:none; }
+
+  .card { background:#222e4c; border:1px solid rgba(199,206,222,.08); border-radius:20px; }
+  .card-deep { background:#1a2440; border:1px solid rgba(199,206,222,.07); border-radius:20px; }
+  .btn-press { transition: transform .12s ease, filter .15s ease; }
+  .btn-press:active { transform: scale(.95); filter: brightness(1.08); }
+
+  .skeleton { background: linear-gradient(90deg,#222e4c 25%,#2b3a5e 37%,#222e4c 63%); background-size:400% 100%; animation: shimmer 1.4s ease infinite; border-radius:12px; }
+
+  /* チャートのツールチップ */
+  .viz-tip { position:absolute; z-index:20; background:#0d1424; border:1px solid rgba(199,206,222,.18); color:#eef1f8; font-size:11px; font-weight:700; padding:6px 10px; border-radius:10px; pointer-events:none; white-space:nowrap; box-shadow:0 8px 20px rgba(0,0,0,.4); transform:translate(-50%,-110%); }
+  .viz-tip .tip-sub { color:#8b96b8; font-weight:500; }
+</style>
+</head>
+
+<body>
+<div id="root"></div>
+<div id="toast-root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef, useMemo, useCallback, createContext, useContext } = React;
+
+/* ============================================================
+   SECTION 0: 定数・ユーティリティ
+   ============================================================ */
+const C = {
+  night900:'#0d1424', night800:'#131c31', night700:'#1a2440', night600:'#222e4c', night500:'#2b3a5e',
+  night400:'#3c4c74', night300:'#5b6b94', night200:'#8b96b8', night100:'#c7cede', night50:'#eef1f8',
+  cream:'#faf3e3', cream2:'#f3e7c9', moon:'#f6d97e', moonDeep:'#eec25a',
+  wool:'#faf3e3', woolShade:'#efe3c8', choco:'#7a5236', chocoDark:'#5f3f28', hoof:'#c69a6d', hoofDark:'#b98a5c',
+  face:'#f8dfbe', cheek:'#f5b0a0',
+  // チャート（検証済み: surface #222e4c, dark mode, 全チェックPASS）
+  gold:'#bd861a', peri:'#6d82ec', symp:'#df5346', para:'#25a08c',
+  grid:'#2c3554', axis:'#3c4c74', muted:'#8b96b8',
+  good:'#0ca30c', warning:'#fab219', serious:'#ec835a', critical:'#d03b3b',
+};
+
+const pad2 = (n) => String(n).padStart(2, '0');
+const toDateStr = (d) => `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+const todayStr = () => toDateStr(new Date());
+const addDays = (dateStr, n) => { const d = new Date(dateStr + 'T12:00:00'); d.setDate(d.getDate()+n); return toDateStr(d); };
+const WD = ['日','月','火','水','木','金','土'];
+const fmtMD = (dateStr) => { const d = new Date(dateStr+'T12:00:00'); return `${d.getMonth()+1}/${d.getDate()}`; };
+const fmtMDW = (dateStr) => { const d = new Date(dateStr+'T12:00:00'); return `${d.getMonth()+1}/${d.getDate()}(${WD[d.getDay()]})`; };
+const fmtJP = (dateStr) => { const d = new Date(dateStr+'T12:00:00'); return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日(${WD[d.getDay()]})`; };
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const yen = (n) => '¥' + n.toLocaleString('ja-JP');
+const avg = (arr) => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0;
+
+// 就寝・起床時刻から睡眠時間(h)を計算（日またぎ対応）
+function sleepHours(bed, wake) {
+  if (!bed || !wake) return 0;
+  const [bh, bm] = bed.split(':').map(Number);
+  const [wh, wm] = wake.split(':').map(Number);
+  let mins = (wh*60+wm) - (bh*60+bm);
+  if (mins <= 0) mins += 24*60;
+  return Math.round(mins/6)/10;
+}
+
+function loadScriptOnce(src) {
+  window.__loadedScripts = window.__loadedScripts || {};
+  if (window.__loadedScripts[src]) return window.__loadedScripts[src];
+  window.__loadedScripts[src] = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src; s.crossOrigin = 'anonymous';
+    s.onload = resolve; s.onerror = () => reject(new Error('script load failed: ' + src));
+    document.head.appendChild(s);
+  });
+  return window.__loadedScripts[src];
+}
+
+function toast(msg, type) {
+  const root = document.getElementById('toast-root');
+  const el = document.createElement('div');
+  el.className = 'toast ' + (type === 'xp' ? 'toast-xp' : type === 'err' ? 'toast-err' : 'toast-info');
+  el.textContent = msg;
+  root.appendChild(el);
+  setTimeout(() => { el.style.transition = 'opacity .3s'; el.style.opacity = '0'; setTimeout(() => el.remove(), 320); }, 2600);
+}
+
+/* ============================================================
+   SECTION 1: マスターデータ（行動・記事・ストレッチ・商品）
+   ============================================================ */
+
+// 昨日の行動チェック（すべて自律神経・睡眠に紐づく教育つき）
+const HABITS = [
+  { id:'sun',      label:'朝、太陽の光を浴びた',            icon:'☀️', good:true,  score:+3, symp:0,  para:12,
+    tip:'朝の光は体内時計をリセットし、約15時間後の眠気ホルモン「メラトニン」の分泌を予約します。' },
+  { id:'exercise', label:'日中にからだを動かした',          icon:'🚶', good:true,  score:+3, symp:0,  para:10,
+    tip:'日中の活動は「睡眠圧」を高め、深いノンレム睡眠を増やします。夕方の軽い運動が特に◎。' },
+  { id:'bath',     label:'湯船で温まった（就寝90分前）',    icon:'🛁', good:true,  score:+4, symp:0,  para:15,
+    tip:'深部体温が一度上がって下がるタイミングで強い眠気が訪れます。お風呂は天然の睡眠薬です。' },
+  { id:'caffeine', label:'14時以降にカフェインをとった',    icon:'☕', good:false, score:-4, symp:14, para:0,
+    tip:'カフェインの半減期は4〜6時間。夕方の1杯は、夜まで交感神経（アクセル）を踏み続けます。' },
+  { id:'phone',    label:'布団の中でスマホを見た',          icon:'📱', good:false, score:-4, symp:14, para:0,
+    tip:'ブルーライトと情報の刺激がメラトニンを抑え、脳が「昼モード」のまま朝を迎えてしまいます。' },
+  { id:'alcohol',  label:'寝る前にお酒を飲んだ',            icon:'🍺', good:false, score:-4, symp:10, para:0,
+    tip:'寝つきは良く感じても、アルコール分解時に交感神経が興奮し、後半の眠りが浅くなります。' },
+  { id:'lateMeal', label:'就寝2時間以内に食事をした',       icon:'🍜', good:false, score:-3, symp:8,  para:0,
+    tip:'消化のため内臓が夜勤になり、眠りに必要な深部体温の低下が妨げられます。' },
+  { id:'longNap',  label:'30分以上の昼寝をした',            icon:'💤', good:false, score:-2, symp:5,  para:0,
+    tip:'長い昼寝は夜の睡眠圧を減らします。昼寝は15〜20分・15時までがベストです。' },
+];
+const HABIT = Object.fromEntries(HABITS.map(h => [h.id, h]));
+
+const FEELS = [
+  { v:1, icon:'🌧️', label:'どんより' },
+  { v:2, icon:'⛅', label:'ふつう' },
+  { v:3, icon:'🌞', label:'スッキリ' },
+];
+
+// まなぶ（教育記事 + クイズ）
+const ARTICLES = [
+  { id:'a_ans', emoji:'⚖️', cat:'きほん', title:'自律神経ってなに？整体との深い関係',
+    lead:'眠りの質を決めているのは、意思ではコントロールできない「自律神経」です。',
+    body:[
+      '自律神経には、からだを活動モードにする「交感神経（アクセル）」と、休息モードにする「副交感神経（ブレーキ）」があります。日中はアクセル、夜はブレーキへ、なめらかに切り替わるのが理想のリズムです。',
+      'ところが、ストレス・姿勢のゆがみ・夜のスマホなどでアクセルが踏まれ続けると、布団に入っても脳とからだが休息モードに切り替われず、「寝つけない」「眠りが浅い」状態になります。',
+      '首や背中まわりの筋肉の緊張は自律神経の通り道を圧迫し、切り替えをさらに苦手にします。SLEEPYの施術が「眠れるからだ」づくりにこだわるのはこのためです。施術で緊張をゆるめ、毎日の行動でリズムを整える。この両輪で睡眠は変わります。',
+    ],
+    point:'アプリの「自律神経バランス」は毎日の行動チェックから推定しているよ。まずは1週間つけてみてね！',
+    quiz:{ q:'夜、眠るときに優位になっているとよい自律神経は？', choices:['交感神経（アクセル）','副交感神経（ブレーキ）','どちらも同じくらい'], answer:1,
+      explain:'夜は副交感神経（ブレーキ）が優位になることで、心拍や体温が下がり自然な眠りに入れます。' } },
+  { id:'a_sun', emoji:'🌅', cat:'あさ', title:'朝の光が「夜の眠り」をつくる',
+    lead:'快眠づくりは、起きた直後の15分から始まっています。',
+    body:[
+      '目から入った朝の光は、脳の体内時計をリセットし、そこから約15時間後に眠気ホルモン「メラトニン」が分泌されるようタイマーをセットします。朝7時に光を浴びれば、夜10時ごろに自然な眠気が訪れる計算です。',
+      '窓越しでもOKですが、ベランダや通勤時に直接浴びるのが効果的。曇りの日でも屋外の光は室内の何倍も強力です。',
+      '逆に朝の光を浴びないと体内時計が後ろにずれ、夜になっても眠くならない「夜型化」が進みます。',
+    ],
+    point:'起きたらまずカーテンをあけて、ぼくと一緒にのびをしよう！',
+    quiz:{ q:'朝の光を浴びてから、眠気ホルモン「メラトニン」が分泌されるまでの時間は約何時間？', choices:['約5時間','約15時間','約24時間'], answer:1,
+      explain:'約15時間後です。朝7時の光なら夜10時ごろ。朝の習慣が夜の眠気を予約しています。' } },
+  { id:'a_caffeine', emoji:'☕', cat:'ひる', title:'カフェインと上手につきあう',
+    lead:'午後のコーヒー1杯が、夜中まで神経のアクセルを踏んでいるかも。',
+    body:[
+      'カフェインには眠気物質「アデノシン」の働きをブロックし、交感神経を刺激する作用があります。問題はその持続時間。カフェインの血中濃度が半分になるまで4〜6時間かかります。',
+      '16時に飲んだコーヒーは、22時になっても半分が体内で働き続けている計算です。寝つきが悪い方、眠りが浅い方は「14時まで」を目安にしましょう。',
+      '午後はノンカフェインのハーブティーや麦茶がおすすめ。温かい飲み物は副交感神経も助けてくれます。',
+    ],
+    point:'サロンでは午後も安心して飲める「おやすみハーブティー」を扱っているよ。',
+    quiz:{ q:'カフェインの効果が半分になるまでにかかる時間は？', choices:['30分〜1時間','1〜2時間','4〜6時間'], answer:2,
+      explain:'4〜6時間です。夕方の1杯は就寝時刻まで残ります。14時以降は控えめに。' } },
+  { id:'a_phone', emoji:'📱', cat:'よる', title:'寝る前スマホが脳を「昼」にする',
+    lead:'布団の中の10分のつもりが、眠りを1時間分浅くしています。',
+    body:[
+      'スマホ画面のブルーライトは、波長が朝の空の光に似ているため、脳が「今は昼だ」と勘違いしてメラトニンの分泌を止めてしまいます。',
+      'さらにSNSやニュースの情報刺激は交感神経を興奮させます。光と情報のダブルパンチで、脳は布団の中でも戦闘モードのまま。',
+      '対策は「就寝60分前からスマホを寝室に持ち込まない」こと。難しければブルーライトカットや画面のナイトモードから始めましょう。',
+    ],
+    point:'夜ふかしスマホの日は、ぼくのねむりも浅くなっちゃう…いっしょに20時以降はひかえめにしよう。',
+    quiz:{ q:'ブルーライトが眠りを妨げるいちばんの理由は？', choices:['目が疲れるから','脳が昼と勘違いしてメラトニンが止まるから','画面が明るくてまぶしいから'], answer:1,
+      explain:'ブルーライトは朝の光と似た波長のため、脳が昼と判断しメラトニン分泌を止めてしまいます。' } },
+  { id:'a_bath', emoji:'🛁', cat:'よる', title:'お風呂は天然の睡眠薬',
+    lead:'眠気のスイッチは「深部体温の落差」。お風呂で作れます。',
+    body:[
+      '人は、からだの内部の温度（深部体温）がぐっと下がるときに強い眠気を感じます。就寝90分前に40℃のお湯に15分つかると、一時的に上がった深部体温が就寝時刻に向かって大きく下がり、自然な眠気の波がやってきます。',
+      'シャワーだけではこの落差が作れません。また42℃以上の熱いお湯は交感神経を刺激して逆効果。「ぬるめに、ゆっくり」が合言葉です。',
+      '炭酸系の入浴剤は血流を促し、短時間でも深部体温を効率よく上げてくれます。',
+    ],
+    point:'施術で血流がよくなった日は、お風呂の効果もアップするんだよ。',
+    quiz:{ q:'快眠のためのお風呂の入り方で正しいのは？', choices:['就寝直前に42℃で5分','就寝90分前に40℃で15分','朝に熱めのシャワーだけ'], answer:1,
+      explain:'就寝90分前・40℃・15分が黄金ルール。深部体温の落差が眠気を作ります。' } },
+  { id:'a_posture', emoji:'🧍', cat:'しせい', title:'姿勢と呼吸と自律神経',
+    lead:'スマホ首・猫背は「眠れないからだ」の入り口です。',
+    body:[
+      '頭が前に出る姿勢（ストレートネック）になると、首の後ろの筋肉が約2〜3倍の頭の重さを支え続けることになり、常に緊張状態に。首まわりには自律神経の重要な通り道があるため、この緊張が交感神経の興奮を招きます。',
+      'さらに猫背は胸郭を圧迫し、呼吸を浅くします。浅く速い呼吸は交感神経を優位にする呼吸。つまり姿勢の崩れは、24時間アクセルを踏み続ける状態を作るのです。',
+      'SLEEPYの姿勢分析で自分の状態を数値で知り、施術とストレッチで整えていきましょう。施術前後の変化はアプリで比較できます。',
+    ],
+    point:'姿勢分析のBefore/Afterを見ると、からだの変化がひと目でわかるよ！',
+    quiz:{ q:'猫背が眠りに悪い理由として正しいのは？', choices:['見た目が悪いから','呼吸が浅くなり交感神経が優位になるから','背が低く見えるから'], answer:1,
+      explain:'猫背は胸郭を圧迫して呼吸を浅くし、交感神経優位の状態を作ってしまいます。' } },
+  { id:'a_alcohol', emoji:'🍺', cat:'よる', title:'「寝酒でぐっすり」のワナ',
+    lead:'お酒で眠るのは、気絶に近い眠りかもしれません。',
+    body:[
+      'アルコールには鎮静作用があるため寝つきは良くなったように感じます。しかし体内で分解が始まると、アセトアルデヒドが交感神経を刺激し、心拍数が上がって眠りが浅くなります。',
+      '特に睡眠後半のレム睡眠が乱れ、中途覚醒や早朝覚醒の原因に。利尿作用でトイレにも起きやすくなります。',
+      '晩酌を楽しむなら「就寝3時間前まで・適量」で。寝るためのお酒は少しずつ量が増えやすいので要注意です。',
+    ],
+    point:'お酒の日は、いつもより1杯多くお水を飲むといいんだって。',
+    quiz:{ q:'寝る前のお酒で起こりやすいのは？', choices:['眠りが深くなる','後半の眠りが浅くなり中途覚醒が増える','朝スッキリ起きられる'], answer:1,
+      explain:'アルコール分解時に交感神経が刺激され、後半の眠りが浅くなり中途覚醒が増えます。' } },
+  { id:'a_weekend', emoji:'🛌', cat:'あさ', title:'休日の寝だめはなぜ逆効果？',
+    lead:'昼までの二度寝は「時差ボケ」を自作しています。',
+    body:[
+      '休日に昼まで寝ると、体内時計が数時間うしろにずれます。これは海外旅行の時差ボケと同じ状態で、「ソーシャル・ジェットラグ（社会的時差ボケ）」と呼ばれます。',
+      '月曜の朝がつらいのは気合いの問題ではなく、からだが「時差ボケ中」だから。睡眠リズムの乱れは自律神経の切り替えも乱します。',
+      '寝だめしたい日も、起きる時刻は平日+2時間以内に。足りない分は15〜20分の昼寝で補うのが正解です。',
+    ],
+    point:'毎日だいたい同じ時間に起きると、ぼくの生活リズムも整うよ〜。',
+    quiz:{ q:'休日の睡眠リズム、おすすめは？', choices:['昼まで寝だめして回復','起床は平日+2時間以内、足りなければ短い昼寝','徹夜でリズムを戻す'], answer:1,
+      explain:'起床時刻のズレを2時間以内に抑えると、体内時計のずれ（社会的時差ボケ）を防げます。' } },
+];
+
+// ストレッチ（ガイド付き）
+const STRETCHES = [
+  { id:'s_neck_side', emoji:'🦒', name:'首のよこ倒しストレッチ', area:'くび', mins:2, when:'よる',
+    effect:'首すじ（肩甲挙筋・僧帽筋上部）をゆるめ、頭への血流と自律神経の通り道を楽にします。',
+    autonomic:'首の緊張がゆるむと交感神経の興奮がしずまり、入眠モードに入りやすくなります。',
+    forIssues:['neckForward','fallAsleep','shoulderDiff'],
+    steps:[
+      { text:'背すじを伸ばして座り、右手を頭の左側にそえる', sec:10 },
+      { text:'息を吐きながら、ゆっくり右に倒して30秒キープ', sec:30 },
+      { text:'ゆっくり戻して、反対側も同じように30秒', sec:30 },
+      { text:'最後に首をゆっくり大きく1周まわす', sec:20 },
+    ] },
+  { id:'s_chest', emoji:'🫁', name:'胸ひらきストレッチ', area:'むね・せなか', mins:2, when:'よる',
+    effect:'縮こまった胸の筋肉（大胸筋・小胸筋）を開き、深い呼吸ができる胸郭を取り戻します。',
+    autonomic:'深くゆっくりした呼吸は、副交感神経を直接オンにする最強のスイッチです。',
+    forIssues:['posture','fallAsleep','shallowBreath'],
+    steps:[
+      { text:'壁の横に立ち、ひじを肩の高さで壁につける', sec:10 },
+      { text:'胸を前にひらくように体を反対へひねり30秒キープ', sec:30 },
+      { text:'反対側も同じように30秒', sec:30 },
+      { text:'両手を後ろで組んで胸を張り、深呼吸を3回', sec:20 },
+    ] },
+  { id:'s_scapula', emoji:'🦋', name:'肩甲骨はがし体操', area:'かた', mins:2, when:'いつでも',
+    effect:'肩甲骨まわりの筋肉を動かして血流を改善。肩こり・肩の高さの左右差にアプローチします。',
+    autonomic:'肩甲骨まわりには褐色脂肪細胞が多く、動かすと体温調節が整い眠りやすくなります。',
+    forIssues:['shoulderDiff','posture'],
+    steps:[
+      { text:'両ひじを曲げ、指先を肩先にちょこんと乗せる', sec:10 },
+      { text:'ひじで大きな円を描くように後ろ回し10回', sec:30 },
+      { text:'前回しも同じように10回', sec:30 },
+      { text:'最後に両肩をすとんと落として脱力×3回', sec:15 },
+    ] },
+  { id:'s_waist', emoji:'🌀', name:'寝たまま腰ひねり', area:'こし', mins:3, when:'よる',
+    effect:'腰まわり〜背中の筋肉をゆるめ、寝返りしやすいからだへ。腰の張りにアプローチ。',
+    autonomic:'背骨まわりがゆるむと、背骨に沿って走る自律神経の切り替えがスムーズになります。',
+    forIssues:['pelvis','wakeMid'],
+    steps:[
+      { text:'あお向けに寝て、両ひざを立てる', sec:10 },
+      { text:'両ひざをそろえて右へパタン。顔は左へ。30秒', sec:30 },
+      { text:'ゆっくり戻して、反対側も30秒', sec:30 },
+      { text:'ひざを抱えて、ゆらゆら左右にゆれる', sec:30 },
+      { text:'手足をのばして、大きく深呼吸×3', sec:20 },
+    ] },
+  { id:'s_hip', emoji:'🍑', name:'おしり伸ばしストレッチ', area:'おしり・骨盤', mins:2, when:'よる',
+    effect:'骨盤を支えるお尻の筋肉（梨状筋など）をゆるめ、骨盤の傾きと腰の負担を軽くします。',
+    autonomic:'骨盤まわりの緊張がとれると下半身の血流が改善し、深部体温が下がりやすくなります。',
+    forIssues:['pelvis','coldFeet'],
+    steps:[
+      { text:'イスに座り、右足首を左ひざの上に乗せる', sec:10 },
+      { text:'背すじを伸ばしたまま、上体をゆっくり前へ倒し30秒', sec:30 },
+      { text:'ゆっくり戻して、反対側も30秒', sec:30 },
+    ] },
+  { id:'s_478', emoji:'🌬️', name:'4-7-8 リラックス呼吸法', area:'じりつしんけい', mins:3, when:'よる',
+    effect:'「4秒吸う→7秒止める→8秒吐く」。吐く息を長くすることで心拍がゆっくりに。',
+    autonomic:'長い呼気は副交感神経をダイレクトに刺激します。布団の中でできる入眠スイッチ。',
+    forIssues:['fallAsleep','stress','wakeMid'],
+    steps:[
+      { text:'楽な姿勢で座るか、あお向けに寝る。口から息を吐ききる', sec:10 },
+      { text:'鼻から4秒すう → 7秒とめる → 口から8秒はく', sec:20 },
+      { text:'同じ呼吸をもう1回（4-7-8）', sec:20 },
+      { text:'さらに2回くり返す。心臓がゆっくりになるのを感じて', sec:40 },
+    ] },
+  { id:'s_calf', emoji:'🦵', name:'ふくらはぎポンプ体操', area:'あし', mins:2, when:'よる',
+    effect:'第二の心臓ふくらはぎを動かし、足先の血流を改善。冷え・むくみにアプローチ。',
+    autonomic:'手足がぽかぽかして熱を放出できると、深部体温が下がり自然な眠気が訪れます。',
+    forIssues:['coldFeet','wakeMid'],
+    steps:[
+      { text:'壁に手をつき、右足を大きく一歩うしろへ', sec:10 },
+      { text:'かかとを床につけたまま体重を前へ。30秒キープ', sec:30 },
+      { text:'反対側も同じように30秒', sec:30 },
+      { text:'仕上げにかかとの上げ下げを10回', sec:20 },
+    ] },
+  { id:'s_morning', emoji:'🌻', name:'朝のせのびリセット体操', area:'ぜんしん', mins:1, when:'あさ',
+    effect:'背骨をまっすぐに整えて1日をスタート。朝の光と一緒に行うと効果倍増。',
+    autonomic:'朝のスイッチは交感神経。気持ちよく切り替えると、夜の副交感神経も働きやすくなります。',
+    forIssues:['morning','posture'],
+    steps:[
+      { text:'足を腰幅にひらき、両手を組んで頭の上へ', sec:10 },
+      { text:'息を吸いながら、ぐーっと真上にせのび10秒', sec:15 },
+      { text:'左右にゆっくりからだを倒す（各10秒）', sec:20 },
+      { text:'手を下ろして、肩をすとんと脱力×2回', sec:10 },
+    ] },
+];
+const STRETCH = Object.fromEntries(STRETCHES.map(s => [s.id, s]));
+
+// ショップ商品（回数券含む）
+const PRODUCTS = [
+  { id:'p_pillow', emoji:'🛏️', name:'SLEEPY オリジナル快眠まくら', price:12800, cat:'ねぐっず',
+    desc:'首のカーブを自然に支える、サロン監修の高さ調整式まくら。ストレートネック傾向の方に。',
+    tags:['neckForward','wakeMid','pillow'] },
+  { id:'p_bath', emoji:'🛁', name:'重炭酸 入浴タブレット 30錠', price:2480, cat:'にゅうよく',
+    desc:'ぬるめのお湯でもしっかり温まる炭酸入浴剤。深部体温の落差づくりをサポート。',
+    tags:['bath','coldFeet','fallAsleep'] },
+  { id:'p_tea', emoji:'🍵', name:'おやすみハーブティー 30包', price:1780, cat:'いんりょう',
+    desc:'カモミール＆ラベンダーのノンカフェインブレンド。午後のコーヒーの置き換えに。',
+    tags:['caffeine','fallAsleep','stress'] },
+  { id:'p_glasses', emoji:'👓', name:'ブルーライトカットメガネ', price:4980, cat:'めぐっず',
+    desc:'夜のスマホ・PC時間の光刺激をカット。メラトニンの分泌を守ります。',
+    tags:['phone'] },
+  { id:'p_pole', emoji:'🧘', name:'ストレッチポール', price:8800, cat:'うんどう',
+    desc:'乗るだけで胸がひらいて背骨リセット。猫背・肩の左右差のセルフケアの定番。',
+    tags:['posture','shoulderDiff','shallowBreath'] },
+  { id:'p_mask', emoji:'🎭', name:'シルクアイマスク', price:2980, cat:'ねぐっず',
+    desc:'光を遮って眠りのホルモンを守る、肌ざわりなめらかなシルク100%。',
+    tags:['wakeMid','morning'] },
+  { id:'p_spray', emoji:'🌿', name:'ラベンダー ピロースプレー', price:1980, cat:'アロマ',
+    desc:'枕にひと吹き。ラベンダーの香りが副交感神経をやさしくオンに。',
+    tags:['fallAsleep','stress'] },
+  { id:'p_gaba', emoji:'💊', name:'GABA配合 おやすみサプリ 30日分', price:3980, cat:'サプリ',
+    desc:'ストレス社会の眠りをサポートするGABA・グリシン・テアニン配合。',
+    tags:['stress','wakeMid'] },
+  { id:'t_5', emoji:'🎫', name:'施術回数券（5回）', price:27500, cat:'かいすうけん', ticket:{ count:5, months:6 },
+    desc:'1回あたり¥5,500。定期的なからだメンテナンスに。有効期限6ヶ月。',
+    tags:['visit'] },
+  { id:'t_10', emoji:'🎫', name:'施術回数券（10回）', price:52000, cat:'かいすうけん', ticket:{ count:10, months:12 },
+    desc:'1回あたり¥5,200が最もお得。睡眠改善は継続がカギ。有効期限12ヶ月。',
+    tags:['visit'] },
+];
+const PRODUCT = Object.fromEntries(PRODUCTS.map(p => [p.id, p]));
+
+/* ============================================================
+   SECTION 2: 睡眠スコア・自律神経・レベル計算
+   ============================================================ */
+
+function calcSleepScore(log) {
+  const h = sleepHours(log.bed, log.wake);
+  let dur;
+  if (h >= 7 && h <= 8.5) dur = 40;
+  else if ((h >= 6.5 && h < 7) || (h > 8.5 && h <= 9)) dur = 33;
+  else if ((h >= 6 && h < 6.5) || (h > 9 && h <= 9.5)) dur = 25;
+  else if (h >= 5 && h < 6) dur = 15;
+  else dur = 6;
+  const quality = Math.round((log.quality - 1) / 4 * 25);
+  const awake = Math.max(0, 12 - 4 * (log.awakenings || 0));
+  const feel = { 1: 2, 2: 7, 3: 13 }[log.feel] || 7;
+  let habit = 0;
+  (log.habits || []).forEach(id => { const hh = HABIT[id]; if (hh) habit += hh.score; });
+  habit = clamp(habit, -10, 10);
+  return clamp(dur + quality + awake + feel + habit, 0, 100);
+}
+
+// 自律神経バランス推定: -100(交感優位) 〜 +100(副交感優位・リラックス)
+function calcAutonomic(log) {
+  let symp = 0, para = 0;
+  (log.habits || []).forEach(id => { const h = HABIT[id]; if (h) { symp += h.symp; para += h.para; } });
+  const hours = sleepHours(log.bed, log.wake);
+  if (hours < 6) symp += 15; else if (hours >= 7) para += 8;
+  if (log.quality <= 2) symp += 12; else if (log.quality >= 4) para += 10;
+  if ((log.awakenings || 0) >= 2) symp += 10;
+  if (log.feel === 3) para += 8; else if (log.feel === 1) symp += 8;
+  return clamp(Math.round(para - symp), -100, 100);
+}
+
+function autonomicLabel(v) {
+  if (v <= -40) return { label:'交感神経がかなり優位', short:'おつかれモード', advice:'アクセル踏みっぱなしのサイン。今夜は湯船と4-7-8呼吸でブレーキを。施術でのリセットもおすすめです。' };
+  if (v <= -15) return { label:'交感神経がやや優位', short:'がんばりモード', advice:'少し緊張ぎみ。夜のスマホを控えて、リラックス習慣を1つ足してみましょう。' };
+  if (v < 15)  return { label:'バランスはほぼ中間', short:'ふつうモード', advice:'いい調子。良い習慣を続けて、リラックス側に育てていきましょう。' };
+  if (v < 40)  return { label:'副交感神経がやや優位', short:'リラックスモード', advice:'切り替え上手です！この調子で朝の光と日中の活動もキープ。' };
+  return { label:'副交感神経がしっかり優位', short:'ぐっすりモード', advice:'すばらしい切り替え力。スーピーくんも安心してぐっすりです。' };
+}
+
+function scoreLabel(s) {
+  if (s >= 85) return { label:'ぐっすり', color:C.para, emoji:'🌟' };
+  if (s >= 70) return { label:'よいねむり', color:C.para, emoji:'😊' };
+  if (s >= 50) return { label:'まずまず', color:C.warning, emoji:'😌' };
+  return { label:'おつかれぎみ', color:C.serious, emoji:'🥱' };
+}
+
+// レベル: 次のレベルに必要なXP = 60 + (lv-1)*30
+function levelFromXp(xp) {
+  let lv = 1, rest = xp;
+  while (lv < 30) {
+    const need = 60 + (lv - 1) * 30;
+    if (rest < need) return { lv, cur: rest, need };
+    rest -= need; lv++;
+  }
+  return { lv: 30, cur: 0, need: 1 };
+}
+
+const STAGES = [
+  { min:1,  title:'ねむりのたまご' }, { min:3,  title:'すやすや見習い' }, { min:6,  title:'おひるねの達人' },
+  { min:10, title:'ねむりの案内人' }, { min:15, title:'快眠マイスター' }, { min:20, title:'ねむりの守り神' },
+];
+const stageTitle = (lv) => [...STAGES].reverse().find(s => lv >= s.min).title;
+
+const ACCESSORIES = [
+  { id:'nightcap', lv:2,  name:'ナイトキャップ', emoji:'🎩' },
+  { id:'pillow',   lv:3,  name:'ふわふわまくら', emoji:'🛏️' },
+  { id:'star',     lv:5,  name:'ほしのともだち', emoji:'⭐' },
+  { id:'blanket',  lv:7,  name:'もこもこ毛布', emoji:'🧣' },
+  { id:'lamp',     lv:10, name:'つきのランプ', emoji:'🏮' },
+  { id:'crown',    lv:15, name:'ねむりのかんむり', emoji:'👑' },
+];
+
+/* ============================================================
+   SECTION 3: 分析 → おすすめ提案エンジン
+   （睡眠記録 × 姿勢分析 × 来店履歴 → ストレッチ・商品・記事）
+   ============================================================ */
+
+function recentLogs(state, n) {
+  const dates = Object.keys(state.sleepLogs || {}).sort().slice(-n);
+  return dates.map(d => ({ date: d, ...state.sleepLogs[d] }));
+}
+
+function analyzeIssues(state) {
+  const logs = recentLogs(state, 7);
+  const issues = [];
+  const push = (id, label, evidence, weight) => issues.push({ id, label, evidence, weight });
+
+  if (logs.length) {
+    const scores = logs.map(l => l.score);
+    const quals = logs.map(l => l.quality);
+    const hrs = logs.map(l => sleepHours(l.bed, l.wake));
+    const awakes = logs.map(l => l.awakenings || 0);
+    const habitCount = (id) => logs.filter(l => (l.habits || []).includes(id)).length;
+
+    if (avg(scores) < 65) push('lowScore', '睡眠スコアが低め', `直近7日の平均 ${Math.round(avg(scores))}点`, 5);
+    if (avg(quals) < 3) push('fallAsleep', 'ねむりの質が低め', `質の平均 ${avg(quals).toFixed(1)}/5`, 4);
+    if (avg(hrs) < 6.5 && avg(hrs) > 0) push('shortSleep', '睡眠時間が不足ぎみ', `平均 ${avg(hrs).toFixed(1)}時間`, 4);
+    if (avg(awakes) >= 1.3) push('wakeMid', '夜中に目が覚めやすい', `中途覚醒 平均${avg(awakes).toFixed(1)}回`, 4);
+    if (habitCount('caffeine') >= 2) push('caffeine', '午後のカフェインが多め', `7日間で${habitCount('caffeine')}回`, 3);
+    if (habitCount('phone') >= 3) push('phone', '寝る前スマホの習慣', `7日間で${habitCount('phone')}回`, 3);
+    if (habitCount('alcohol') >= 2) push('alcohol', '寝る前の飲酒が多め', `7日間で${habitCount('alcohol')}回`, 3);
+    if (logs.length >= 3 && habitCount('bath') <= Math.floor(logs.length / 3)) push('bath', '湯船の習慣が少なめ', `7日間で${habitCount('bath')}回`, 2);
+    const lastBal = calcAutonomic(logs[logs.length - 1]);
+    if (lastBal <= -25) push('stress', '交感神経が優位（緊張ぎみ）', autonomicLabel(lastBal).label, 4);
+  } else {
+    push('noLog', 'まだ睡眠記録がありません', '記録するとスーピーくんが分析します', 5);
+  }
+
+  const posture = (state.posture || []).slice(-6);
+  const lastSide = [...posture].reverse().find(p => p.mode === 'side');
+  const lastFront = [...posture].reverse().find(p => p.mode === 'front');
+  if (lastSide && lastSide.metrics.fha > 12) push('neckForward', '頭が前に出ている（スマホ首傾向）', `頭部前方角 ${Math.round(lastSide.metrics.fha)}°`, 5);
+  if (lastFront && Math.abs(lastFront.metrics.shoulderTilt) > 2.5) push('shoulderDiff', '肩の高さに左右差', `傾き ${Math.abs(lastFront.metrics.shoulderTilt).toFixed(1)}°`, 3);
+  if (lastFront && Math.abs(lastFront.metrics.pelvisTilt) > 2.5) push('pelvis', '骨盤の高さに左右差', `傾き ${Math.abs(lastFront.metrics.pelvisTilt).toFixed(1)}°`, 3);
+  if ((lastSide && lastSide.score < 70) || (lastFront && lastFront.score < 70)) push('posture', '姿勢スコアが低め', '姿勢の崩れは呼吸と自律神経に影響します', 4);
+
+  const visits = state.visits || [];
+  if (visits.length) {
+    const last = visits[visits.length - 1].date;
+    const days = Math.round((new Date(todayStr()) - new Date(last)) / 86400000);
+    if (days >= 21) push('visitStale', `前回のご来店から${days}日`, 'からだのメンテナンス時期です', 3);
+  }
+  return issues.sort((a, b) => b.weight - a.weight);
+}
+
+// 課題ID → 提案の対応表
+const RECIPES = {
+  neckForward: { stretch:['s_neck_side','s_chest'], product:['p_pillow','p_pole'], article:['a_posture'],
+    msg:'首が前に出ると呼吸が浅くなり交感神経が優位に。首ケアとまくらの見直しがおすすめ。' },
+  shoulderDiff: { stretch:['s_scapula','s_chest'], product:['p_pole'], article:['a_posture'],
+    msg:'肩の左右差は肩甲骨まわりの緊張のサイン。ほぐして眠りやすいからだへ。' },
+  pelvis: { stretch:['s_hip','s_waist'], product:['p_pole'], article:['a_posture'],
+    msg:'骨盤の傾きは腰の緊張と寝返りに影響。おしりと腰をゆるめましょう。' },
+  posture: { stretch:['s_chest','s_scapula'], product:['p_pole'], article:['a_posture'],
+    msg:'姿勢が整うと呼吸が深くなり、副交感神経が働きやすくなります。' },
+  fallAsleep: { stretch:['s_478','s_neck_side'], product:['p_spray','p_tea'], article:['a_bath','a_phone'],
+    msg:'寝つき改善のカギは「ブレーキ役」の副交感神経。呼吸法と香りでスイッチを。' },
+  wakeMid: { stretch:['s_478','s_waist'], product:['p_mask','p_gaba','p_pillow'], article:['a_alcohol'],
+    msg:'中途覚醒には光・アルコール・からだの緊張対策が効きます。' },
+  shortSleep: { stretch:['s_morning'], product:['p_tea'], article:['a_weekend','a_sun'],
+    msg:'まずは就寝を15分だけ前へ。朝の光でリズムから整えましょう。' },
+  caffeine: { stretch:[], product:['p_tea'], article:['a_caffeine'],
+    msg:'午後はノンカフェインに置き換えると、夜のアクセルがゆるみます。' },
+  phone: { stretch:['s_478'], product:['p_glasses'], article:['a_phone'],
+    msg:'夜の光刺激をカットしてメラトニンを守りましょう。' },
+  alcohol: { stretch:['s_478'], product:['p_tea'], article:['a_alcohol'],
+    msg:'寝酒は後半の眠りを浅くします。置き換えドリンクがおすすめ。' },
+  bath: { stretch:['s_calf'], product:['p_bath'], article:['a_bath'],
+    msg:'湯船で深部体温の落差を作ると、自然な眠気がやってきます。' },
+  stress: { stretch:['s_478','s_chest'], product:['p_gaba','p_spray'], article:['a_ans'],
+    msg:'がんばりモードが続いています。意識的にブレーキタイムを。' },
+  lowScore: { stretch:['s_478'], product:['p_bath'], article:['a_ans'],
+    msg:'スコアが低い日が続いたら、施術でからだからリセットするのが近道です。' },
+  visitStale: { stretch:[], product:['t_5','t_10'], article:[],
+    msg:'整えたからだも3週間で少しずつ元に戻ります。そろそろメンテナンスへ！' },
+  coldFeet: { stretch:['s_calf'], product:['p_bath'], article:['a_bath'], msg:'足先の血流を助けて放熱できるからだに。' },
+  morning: { stretch:['s_morning'], product:['p_mask'], article:['a_sun'], msg:'朝のリズムづくりから夜の眠りを整えましょう。' },
+  noLog: { stretch:['s_478'], product:[], article:['a_ans'],
+    msg:'まずは今夜から睡眠記録を！スーピーくんがあなた専用のアドバイスを作ります。' },
+};
+
+function buildRecommendations(state) {
+  const issues = analyzeIssues(state);
+  const recs = [];
+  const usedS = new Set(), usedP = new Set(), usedA = new Set();
+  issues.forEach(issue => {
+    const r = RECIPES[issue.id];
+    if (!r) return;
+    const stretch = (r.stretch || []).filter(id => !usedS.has(id)).slice(0, 2);
+    const product = (r.product || []).filter(id => !usedP.has(id)).slice(0, 2);
+    const article = (r.article || []).filter(id => !usedA.has(id)).slice(0, 1);
+    stretch.forEach(id => usedS.add(id)); product.forEach(id => usedP.add(id)); article.forEach(id => usedA.add(id));
+    recs.push({ issue, msg: r.msg, stretch, product, article });
+  });
+  return recs;
+}
+
+/* ============================================================
+   SECTION 4: 状態管理（localStorage）・デモデータ
+   ============================================================ */
+const STORE_KEY = 'sleepy_app_v1';
+
+function defaultState() {
+  return {
+    version: 1,
+    onboarded: false,
+    profile: { name: '', goal: 'fallAsleep', createdAt: todayStr(), memberNo: 'SL-' + String(Math.floor(1000 + Math.random() * 9000)) },
+    soupy: { xp: 0, wearing: [], petDate: '', petCount: 0 },
+    sleepLogs: {},          // { 'YYYY-MM-DD': {bed, wake, quality, awakenings, feel, habits[], score, balance} }
+    visits: [],             // [{id, date, menu, note, karte?}]
+    tickets: [],            // [{id, name, total, used, purchasedAt, expiresAt, history[]}]
+    posture: [],            // [{id, date, mode, phase, score, metrics, img, pairId}]
+    stretchLog: [],         // [{date, stretchId}]
+    learnRead: [],
+    quizDone: {},
+    orders: [],
+    cart: [],
+    visitFlow: null,        // {step, startedAt, beforeId, afterId, prescribed[], recommended[]}
+    xpLog: [],
+  };
+}
+
+function gainXp(st, amount, reason) {
+  st.soupy.xp += amount;
+  st.xpLog.push({ date: todayStr(), amount, reason });
+  if (st.xpLog.length > 200) st.xpLog = st.xpLog.slice(-200);
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw) { const st = JSON.parse(raw); if (st && st.version === 1) return st; }
+  } catch (e) { console.warn('loadState failed', e); }
+  return defaultState();
+}
+function saveState(st) {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(st)); }
+  catch (e) {
+    // 画像で容量超過した場合は古い姿勢画像から順に落として再保存
+    try {
+      const slim = structuredClone(st);
+      slim.posture.slice(0, -4).forEach(p => { p.img = null; });
+      localStorage.setItem(STORE_KEY, JSON.stringify(slim));
+    } catch (e2) { console.warn('saveState failed', e2); }
+  }
+}
+
+// デモデータ（はじめての方が全機能をすぐ体験できるように）
+function seedDemoState(name, goal) {
+  const st = defaultState();
+  st.onboarded = true;
+  st.profile.name = name || 'ゲスト';
+  st.profile.goal = goal || 'fallAsleep';
+
+  const today = todayStr();
+  // 14日分の睡眠記録（ばらつきのあるリアルな推移）
+  const pattern = [
+    { bed:'00:45', wake:'06:30', q:2, aw:2, feel:1, habits:['phone','caffeine'] },
+    { bed:'00:10', wake:'06:45', q:3, aw:1, feel:2, habits:['phone'] },
+    { bed:'23:50', wake:'06:30', q:3, aw:1, feel:2, habits:['caffeine','exercise'] },
+    { bed:'01:20', wake:'07:00', q:2, aw:2, feel:1, habits:['alcohol','lateMeal'] },
+    { bed:'23:40', wake:'06:40', q:3, aw:1, feel:2, habits:['sun'] },
+    { bed:'23:30', wake:'06:30', q:4, aw:0, feel:3, habits:['sun','bath'] },
+    { bed:'00:30', wake:'08:30', q:3, aw:1, feel:2, habits:['longNap','phone'] },
+    { bed:'23:55', wake:'06:35', q:3, aw:1, feel:2, habits:['exercise','phone'] },
+    { bed:'23:45', wake:'06:30', q:4, aw:1, feel:2, habits:['bath','sun'] },
+    { bed:'00:15', wake:'06:50', q:2, aw:2, feel:1, habits:['phone','caffeine','lateMeal'] },
+    { bed:'23:30', wake:'06:45', q:4, aw:0, feel:3, habits:['sun','exercise','bath'] },
+    { bed:'23:20', wake:'06:30', q:5, aw:0, feel:3, habits:['sun','bath','exercise'] },
+    { bed:'23:59', wake:'07:10', q:3, aw:1, feel:2, habits:['phone','caffeine'] },
+    { bed:'23:35', wake:'06:40', q:4, aw:0, feel:3, habits:['sun','bath'] },
+  ];
+  pattern.forEach((p, i) => {
+    const date = addDays(today, -(pattern.length - i));
+    const log = { bed: p.bed, wake: p.wake, quality: p.q, awakenings: p.aw, feel: p.feel, habits: p.habits };
+    log.score = calcSleepScore(log);
+    log.balance = calcAutonomic(log);
+    st.sleepLogs[date] = log;
+  });
+
+  // 回数券: 10回券を購入済み・3回使用
+  const purchased = addDays(today, -34);
+  st.tickets.push({
+    id: uid(), name: '施術回数券（10回）', total: 10, used: 3,
+    purchasedAt: purchased, expiresAt: addDays(purchased, 365),
+    history: [
+      { date: addDays(today, -30), note: '睡眠整体 60分' },
+      { date: addDays(today, -16), note: '睡眠整体 60分' },
+      { date: addDays(today, -3),  note: '睡眠整体 60分' },
+    ],
+  });
+  st.visits = [
+    { id: uid(), date: addDays(today, -30), menu: '睡眠整体 60分', note: '初回カウンセリング。首肩の緊張が強め。' },
+    { id: uid(), date: addDays(today, -16), menu: '睡眠整体 60分', note: '寝つき改善の実感あり。' },
+    { id: uid(), date: addDays(today, -3),  menu: '睡眠整体 60分', note: '肩の左右差が改善傾向。' },
+  ];
+  st.orders = [{ id: uid(), date: addDays(today, -16), items: [{ id: 'p_tea', qty: 1 }], total: 1780 }];
+
+  // 姿勢分析のデモ結果（正面1件 + 施術前後のペア・画像なし）
+  const pairId = uid();
+  st.posture = [
+    { id: uid(), date: addDays(today, -6), mode: 'front', phase: 'normal',
+      score: 59, metrics: { headTilt: 1.2, shoulderTilt: 3.2, pelvisTilt: 2.8, centerShift: 9.0 }, img: null, demo: true },
+    { id: uid(), date: addDays(today, -3), mode: 'side', phase: 'before', pairId,
+      score: 62, metrics: { fha: 18.4, trunkLean: 6.2, kneeLean: 3.1 }, img: null, demo: true },
+    { id: uid(), date: addDays(today, -3), mode: 'side', phase: 'after', pairId,
+      score: 84, metrics: { fha: 8.9, trunkLean: 2.8, kneeLean: 1.6 }, img: null, demo: true },
+  ];
+
+  st.stretchLog = [
+    { date: addDays(today, -2), stretchId: 's_478' },
+    { date: addDays(today, -1), stretchId: 's_neck_side' },
+    { date: addDays(today, -1), stretchId: 's_478' },
+  ];
+  st.learnRead = ['a_ans', 'a_sun'];
+  st.quizDone = { a_ans: true };
+  gainXp(st, 430, 'これまでの活動');
+  return st;
+}
+
+/* ============================================================
+   SECTION 5: スーピーくん（ロゴ忠実SVG + アニメーション）
+   もこもこの輪郭は「茶色の拡大円の集合を背面に敷く」ことで
+   ひとつながりのアウトラインとして表現している。
+   ============================================================ */
+
+// 羊毛のもこもこ円 [cx, cy, r]
+const WOOL_HEAD = [ [120,64,30],[91,72,24],[149,72,24],[73,90,19],[167,90,19],[78,110,15],[162,110,15] ];
+const WOOL_BANG = [ [98,82,16],[120,78,18],[142,82,16] ];
+const WOOL_BODY = [
+  [120,170,62],[78,150,33],[162,150,33],[66,182,28],[174,182,28],
+  [88,208,28],[152,208,28],[120,214,30],[100,132,26],[140,132,26],
+];
+const EARS = [ { cx:64, cy:104, rot:-24 }, { cx:176, cy:104, rot:24 } ];
+
+function WoolCircles({ list, fill, extra = 0 }) {
+  return <g>{list.map(([x, y, r], i) => <circle key={i} cx={x} cy={y} r={r + extra} fill={fill} />)}</g>;
+}
+
+function SoupyEyes({ mood }) {
+  if (mood === 'happy' || mood === 'excited') {
+    return (
+      <g>
+        <circle cx={102} cy={112} r={5} fill={C.chocoDark} />
+        <circle cx={138} cy={112} r={5} fill={C.chocoDark} />
+        <circle cx={104} cy={110} r={1.8} fill="#fff" />
+        <circle cx={140} cy={110} r={1.8} fill="#fff" />
+      </g>
+    );
+  }
+  if (mood === 'tired') {
+    return (
+      <g fill="none" stroke={C.chocoDark} strokeWidth={4} strokeLinecap="round">
+        <path d="M94 114 q8 -4 16 0" />
+        <path d="M130 114 q8 -4 16 0" />
+      </g>
+    );
+  }
+  // sleep（ロゴと同じ、穏やかな閉じ目）
+  return (
+    <g fill="none" stroke={C.chocoDark} strokeWidth={4} strokeLinecap="round">
+      <path d="M94 111 q8 7 16 0" />
+      <path d="M130 111 q8 7 16 0" />
+    </g>
+  );
+}
+
+function SoupyAccessory({ id }) {
+  if (id === 'nightcap') return (
+    <g>
+      <path d="M88 56 Q84 26 62 18 Q78 44 92 66 Z" fill="#93a7ee" stroke={C.choco} strokeWidth={4} strokeLinejoin="round" />
+      <circle cx={60} cy={17} r={7} fill={C.cream} stroke={C.choco} strokeWidth={3.5} />
+    </g>
+  );
+  if (id === 'star') return (
+    <g className="anim-floaty" style={{ animationDelay: '-1.2s' }}>
+      <path d="M206 84 l4.2 8.6 9.4 1.3 -6.8 6.7 1.6 9.4 -8.4 -4.4 -8.4 4.4 1.6 -9.4 -6.8 -6.7 9.4 -1.3 Z"
+        fill={C.moon} stroke={C.choco} strokeWidth={3} strokeLinejoin="round" />
+      <circle cx={204} cy={93} r={1.6} fill={C.chocoDark} />
+      <circle cx={210} cy={93} r={1.6} fill={C.chocoDark} />
+    </g>
+  );
+  if (id === 'crown') return (
+    <g>
+      <path d="M92 46 l6 -14 8 9 8 -13 8 13 8 -9 6 14 Z" transform="translate(-14,-4)" fill={C.moon} stroke={C.choco} strokeWidth={3.5} strokeLinejoin="round" />
+    </g>
+  );
+  if (id === 'blanket') return (
+    <g>
+      <path d="M62 186 Q120 172 178 186 L178 224 Q168 234 158 226 Q148 236 138 227 Q128 237 120 228 Q110 237 100 227 Q90 236 80 226 Q70 234 62 224 Z"
+        fill="#f2b9c4" stroke={C.choco} strokeWidth={4} strokeLinejoin="round" opacity={0.96} />
+      <circle cx={95} cy={205} r={4} fill="#fff" opacity={.55} />
+      <circle cx={125} cy={210} r={4} fill="#fff" opacity={.55} />
+      <circle cx={152} cy={204} r={4} fill="#fff" opacity={.55} />
+    </g>
+  );
+  if (id === 'pillow') return (
+    <g>
+      <rect x={58} y={224} width={124} height={26} rx={13} fill="#aab8e8" stroke={C.choco} strokeWidth={4} />
+      <path d="M70 237 q50 8 100 0" stroke="#8194d6" strokeWidth={3} fill="none" strokeLinecap="round" />
+    </g>
+  );
+  if (id === 'lamp') return (
+    <g>
+      <rect x={210} y={140} width={6} height={92} rx={3} fill={C.hoofDark} stroke={C.choco} strokeWidth={3} />
+      <path d="M228 112 a20 20 0 1 0 -10 26 a16 16 0 1 1 10 -26 Z" fill={C.moon} stroke={C.choco} strokeWidth={3.5} style={{ animation: 'moon-pulse 3s ease-in-out infinite' }} />
+      <rect x={200} y={228} width={26} height={8} rx={4} fill={C.hoofDark} stroke={C.choco} strokeWidth={3} />
+    </g>
+  );
+  return null;
+}
+
+function Soupy({ size = 220, mood = 'sleep', wearing = [], animate = true, showZzz, onTap, className = '', title }) {
+  const [bounce, setBounce] = useState(0);
+  const [hearts, setHearts] = useState([]);
+  const zzz = showZzz !== undefined ? showZzz : mood === 'sleep';
+
+  const handleTap = () => {
+    setBounce(b => b + 1);
+    const id = uid();
+    setHearts(hs => [...hs, { id, x: 150 + Math.random() * 40, y: 70 + Math.random() * 20 }]);
+    setTimeout(() => setHearts(hs => hs.filter(h => h.id !== id)), 1300);
+    if (onTap) onTap();
+  };
+
+  return (
+    <div className={`relative inline-block select-none ${animate ? 'anim-floaty' : ''} ${className}`}
+      style={{ width: size, height: size * (250 / 240) }}
+      onClick={handleTap} role={onTap ? 'button' : undefined} aria-label={title || 'スーピーくん'}>
+      <svg key={bounce} viewBox="0 0 240 250" width="100%" height="100%"
+        className={bounce ? 'soupy-tap-bounce' : ''} style={{ overflow: 'visible', display: 'block' }}>
+
+        {/* ---- もこもこ輪郭（背面の茶色シルエット） ---- */}
+        <g>
+          <WoolCircles list={WOOL_BODY} fill={C.choco} extra={5} />
+          <WoolCircles list={WOOL_HEAD} fill={C.choco} extra={5} />
+          {EARS.map((e, i) => (
+            <ellipse key={i} cx={e.cx} cy={e.cy} rx={19} ry={12} fill={C.choco} transform={`rotate(${e.rot} ${e.cx} ${e.cy})`} />
+          ))}
+          <WoolCircles list={WOOL_BANG} fill={C.choco} extra={4.5} />
+        </g>
+
+        {/* ---- 耳 ---- */}
+        {EARS.map((e, i) => (
+          <g key={i} transform={`rotate(${e.rot} ${e.cx} ${e.cy})`}>
+            <ellipse cx={e.cx} cy={e.cy} rx={15} ry={8.5} fill={C.face} />
+            <ellipse cx={e.cx + (i === 0 ? -2 : 2)} cy={e.cy} rx={8} ry={4.5} fill={C.cheek} opacity={.65} />
+          </g>
+        ))}
+
+        {/* ---- からだ（呼吸アニメーション） ---- */}
+        <g style={animate ? { animation: 'breathe 3.4s ease-in-out infinite', transformBox: 'fill-box', transformOrigin: '50% 90%' } : null}>
+          <WoolCircles list={WOOL_BODY} fill={C.wool} />
+          {/* おなかの陰影 */}
+          <ellipse cx={120} cy={176} rx={44} ry={34} fill={C.woolShade} opacity={.55} />
+          <ellipse cx={120} cy={172} rx={40} ry={30} fill={C.wool} />
+        </g>
+
+        {/* ---- あし ---- */}
+        <ellipse cx={84} cy={222} rx={21} ry={13} fill={C.hoofDark} stroke={C.choco} strokeWidth={4.5} />
+        <ellipse cx={156} cy={222} rx={21} ry={13} fill={C.hoofDark} stroke={C.choco} strokeWidth={4.5} />
+
+        {/* ---- まえあし（おなかの上で休む） ---- */}
+        <g>
+          <ellipse cx={99} cy={172} rx={17} ry={11} fill={C.hoof} stroke={C.choco} strokeWidth={4.5} transform="rotate(24 99 172)" />
+          <ellipse cx={141} cy={172} rx={17} ry={11} fill={C.hoof} stroke={C.choco} strokeWidth={4.5} transform="rotate(-24 141 172)" />
+          <path d="M108 178 l6 4 M132 178 l-6 4" stroke={C.choco} strokeWidth={3.5} strokeLinecap="round" fill="none" />
+        </g>
+
+        {/* ---- 顔 ---- */}
+        <ellipse cx={120} cy={104} rx={35} ry={31} fill={C.face} />
+        {/* まえがみ（スカラップ） */}
+        <g>
+          {WOOL_BANG.map(([x, y, r], i) => <circle key={i} cx={x} cy={y} r={r} fill={C.wool} stroke={C.choco} strokeWidth={4} />)}
+        </g>
+        {/* あたまの羊毛（まえがみ上部のフチを覆う） */}
+        <WoolCircles list={WOOL_HEAD} fill={C.wool} />
+
+        {/* ---- 三日月（ひたいの上・ロゴのシンボル） ---- */}
+        <g style={{ animation: animate ? 'moon-pulse 3.2s ease-in-out infinite' : 'none' }}>
+          <path d="M141 44 a15.5 15.5 0 1 0 8 20 a12 12 0 1 1 -8 -20 Z"
+            fill={C.moon} stroke={C.choco} strokeWidth={4} strokeLinejoin="round" transform="rotate(14 138 56)" />
+        </g>
+
+        {/* ---- 表情 ---- */}
+        <SoupyEyes mood={mood} />
+        <ellipse cx={91} cy={121} rx={8.5} ry={6} fill={C.cheek} opacity={.9} />
+        <ellipse cx={149} cy={121} rx={8.5} ry={6} fill={C.cheek} opacity={.9} />
+        <ellipse cx={120} cy={119} rx={3.4} ry={2.6} fill={C.chocoDark} />
+        <path d="M120 121 l0 5" stroke={C.chocoDark} strokeWidth={2.6} strokeLinecap="round" />
+        {mood === 'excited'
+          ? <path d="M112 126 q8 9 16 0 z" fill="#a2664a" stroke={C.chocoDark} strokeWidth={3} strokeLinejoin="round" />
+          : <path d="M111 126 q4.5 5 9 0 M120 126 q4.5 5 9 0" stroke={C.chocoDark} strokeWidth={3.2} strokeLinecap="round" fill="none" />}
+
+        {/* ---- きせかえ ---- */}
+        {wearing.map(id => <SoupyAccessory key={id} id={id} />)}
+
+        {/* ---- Zzz ---- */}
+        {zzz && (
+          <g fontFamily='"Zen Maru Gothic", sans-serif' fontWeight="900" fill={C.moon} stroke={C.choco} strokeWidth={1}>
+            <text x={176} y={64} fontSize={17} style={{ animation: 'zzz-rise 2.6s ease-in-out infinite' }}>z</text>
+            <text x={188} y={52} fontSize={22} style={{ animation: 'zzz-rise 2.6s ease-in-out .8s infinite' }}>Z</text>
+            <text x={202} y={40} fontSize={27} style={{ animation: 'zzz-rise 2.6s ease-in-out 1.6s infinite' }}>Z</text>
+          </g>
+        )}
+
+        {/* ---- なでたときのハート ---- */}
+        {hearts.map(h => (
+          <text key={h.id} x={h.x} y={h.y} fontSize={20} style={{ animation: 'heart-rise 1.25s ease-out forwards' }}>💛</text>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+// 夜空の背景（星がまたたく）
+const STARFIELD = Array.from({ length: 26 }, (_, i) => ({
+  left: (i * 37 + 13) % 100, top: (i * 53 + 7) % 100,
+  size: 2 + (i % 3), delay: (i % 7) * 0.45, dur: 2.4 + (i % 5) * 0.5,
+}));
+function NightSky({ className = '', children, dense }) {
+  const stars = dense ? STARFIELD : STARFIELD.slice(0, 16);
+  return (
+    <div className={`relative overflow-hidden ${className}`}
+      style={{ background: 'linear-gradient(180deg,#131c31 0%,#1a2440 55%,#232f52 100%)' }}>
+      {stars.map((s, i) => (
+        <span key={i} className="star" style={{
+          left: s.left + '%', top: s.top + '%', width: s.size, height: s.size,
+          animationDelay: s.delay + 's', animationDuration: s.dur + 's',
+        }} />
+      ))}
+      <div className="relative z-10">{children}</div>
+    </div>
+  );
+}
+
+/* ============================================================
+   SECTION 6: UI部品
+   ============================================================ */
+function Btn({ children, kind = 'primary', onClick, disabled, full, small, className = '' }) {
+  const base = `btn-press inline-flex items-center justify-center gap-1.5 font-bold rounded-2xl transition
+    ${small ? 'px-3.5 py-2 text-[12.5px]' : 'px-5 py-3.5 text-[14px]'} ${full ? 'w-full' : ''} ${disabled ? 'opacity-40 pointer-events-none' : ''}`;
+  const kinds = {
+    primary: 'bg-cream-100 text-night-900 shadow-lg shadow-black/20',
+    moon: 'text-night-900 shadow-lg shadow-moon-400/20',
+    ghost: 'bg-night-600 text-cream-50 border border-night-400/40',
+    outline: 'bg-transparent text-night-100 border border-night-300/50',
+    danger: 'bg-[#df5346]/15 text-[#f0968c] border border-[#df5346]/40',
+  };
+  const style = kind === 'moon' ? { background: 'linear-gradient(105deg,#f6d97e,#eec25a)' } : undefined;
+  return <button className={`${base} ${kinds[kind]} ${className}`} style={style} onClick={onClick} disabled={disabled}>{children}</button>;
+}
+
+function SectionTitle({ icon, title, sub, right }) {
+  return (
+    <div className="flex items-end justify-between mb-3 px-0.5">
+      <div>
+        <h2 className="text-[15px] font-black text-cream-50 flex items-center gap-1.5">
+          {icon && <span className="text-[17px]">{icon}</span>}{title}
+        </h2>
+        {sub && <p className="text-[11px] text-night-200 mt-0.5">{sub}</p>}
+      </div>
+      {right}
+    </div>
+  );
+}
+
+function Chip({ children, active, onClick, className = '' }) {
+  return (
+    <button onClick={onClick}
+      className={`btn-press whitespace-nowrap px-3.5 py-1.5 rounded-full text-[12px] font-bold border transition ${active ? 'bg-cream-100 text-night-900 border-cream-100' : 'bg-night-600 text-night-100 border-night-400/40'} ${className}`}>
+      {children}
+    </button>
+  );
+}
+
+function ProgressBar({ pct, color = C.moon, h = 8, track = C.night500 }) {
+  return (
+    <div className="w-full rounded-full overflow-hidden" style={{ height: h, background: track }}>
+      <div className="h-full rounded-full transition-all duration-700" style={{ width: clamp(pct, 0, 100) + '%', background: color }} />
+    </div>
+  );
+}
+
+function Modal({ open, onClose, children, title }) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/60" style={{ backdropFilter: 'blur(3px)' }} />
+      <div className="relative w-full sm:w-[420px] max-h-[88vh] overflow-y-auto no-scrollbar bg-night-700 border border-night-400/40 rounded-t-3xl sm:rounded-3xl p-5 anim-slide-up"
+        onClick={e => e.stopPropagation()}>
+        <div className="mx-auto w-10 h-1.5 rounded-full bg-night-400/60 mb-4 sm:hidden" />
+        {title && <h3 className="text-[16px] font-black text-cream-50 mb-3">{title}</h3>}
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ emoji = '💤', text, sub }) {
+  return (
+    <div className="py-8 text-center">
+      <div className="text-4xl mb-2">{emoji}</div>
+      <p className="text-[13px] font-bold text-night-100">{text}</p>
+      {sub && <p className="text-[11px] text-night-200 mt-1">{sub}</p>}
+    </div>
+  );
+}
+
+function BackHeader({ title, onBack, right }) {
+  return (
+    <div className="sticky top-0 z-40 flex items-center gap-2 px-4 py-3 bg-night-900/85 border-b border-night-600/60" style={{ backdropFilter: 'blur(10px)' }}>
+      <button onClick={onBack} className="btn-press w-9 h-9 rounded-full bg-night-600 flex items-center justify-center text-cream-50" aria-label="もどる">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      </button>
+      <h1 className="flex-1 text-[15px] font-black text-cream-50 truncate">{title}</h1>
+      {right}
+    </div>
+  );
+}
+
+/* ============================================================
+   SECTION 7: チャート（単系列: gold/peri・自律神経: symp/para ダイバージング）
+   ============================================================ */
+
+function useTip() {
+  const [tip, setTip] = useState(null); // {xPct, yPct, main, sub}
+  const show = (xPct, yPct, main, sub) => setTip(t => (t && t.main === main && t.sub === sub) ? null : { xPct, yPct, main, sub });
+  return { tip, show, clear: () => setTip(null) };
+}
+function TipView({ tip }) {
+  if (!tip) return null;
+  return (
+    <div className="viz-tip" style={{ left: tip.xPct + '%', top: tip.yPct + '%' }}>
+      {tip.main}<br /><span className="tip-sub">{tip.sub}</span>
+    </div>
+  );
+}
+
+// 睡眠スコアの推移（単系列・エリア+ライン）
+function TrendChart({ data, height = 170 }) {
+  const { tip, show } = useTip();
+  if (!data.length) return <EmptyState text="まだ記録がありません" sub="睡眠を記録するとグラフが育ちます" />;
+  const W = 340, H = 170, padL = 30, padR = 16, padT = 18, padB = 26;
+  const iw = W - padL - padR, ih = H - padT - padB;
+  const n = data.length;
+  const x = i => padL + (n === 1 ? iw / 2 : i * (iw / (n - 1)));
+  const y = v => padT + ih - (v / 100) * ih;
+  const line = data.map((d, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(d.score).toFixed(1)}`).join(' ');
+  const area = `${line} L${x(n - 1).toFixed(1)},${y(0)} L${x(0).toFixed(1)},${y(0)} Z`;
+  return (
+    <div className="relative">
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block', height: 'auto' }} role="img" aria-label="睡眠スコアの推移">
+        {[0, 50, 100].map(v => (
+          <g key={v}>
+            <line x1={padL} x2={W - padR} y1={y(v)} y2={y(v)} stroke={v === 0 ? C.axis : C.grid} strokeWidth={1} />
+            <text x={padL - 6} y={y(v) + 3.5} fontSize={9} fill={C.muted} textAnchor="end">{v}</text>
+          </g>
+        ))}
+        <path d={area} fill={C.gold} opacity={0.16} />
+        <path d={line} fill="none" stroke={C.gold} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+        {data.map((d, i) => (
+          <g key={d.date}>
+            <circle cx={x(i)} cy={y(d.score)} r={3.2} fill={C.gold} stroke="#222e4c" strokeWidth={1.5} />
+            <circle cx={x(i)} cy={y(d.score)} r={13} fill="transparent"
+              onClick={() => show(x(i) / W * 100, y(d.score) / H * 100, `${d.score}点 ${scoreLabel(d.score).label}`, fmtMDW(d.date))} />
+            <text x={x(i)} y={H - 8} fontSize={9} fill={C.muted} textAnchor="middle">{fmtMD(d.date)}</text>
+          </g>
+        ))}
+        <text x={x(n - 1)} y={y(data[n - 1].score) - 9} fontSize={12} fontWeight="700" fill="#eef1f8" textAnchor="middle">{data[n - 1].score}</text>
+      </svg>
+      <TipView tip={tip} />
+    </div>
+  );
+}
+
+// 睡眠時間（単系列バー + 理想ゾーン 7〜8.5h）
+function HoursBars({ data }) {
+  const { tip, show } = useTip();
+  if (!data.length) return <EmptyState text="まだ記録がありません" />;
+  const W = 340, H = 150, padL = 30, padR = 16, padT = 14, padB = 26;
+  const iw = W - padL - padR, ih = H - padT - padB;
+  const maxV = Math.max(9.5, ...data.map(d => d.hours));
+  const n = data.length;
+  const bw = Math.min(26, iw / n * 0.55);
+  const x = i => padL + (i + 0.5) * (iw / n) - bw / 2;
+  const y = v => padT + ih - (v / maxV) * ih;
+  return (
+    <div className="relative">
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block', height: 'auto' }} role="img" aria-label="睡眠時間の推移">
+        <rect x={padL} y={y(8.5)} width={iw} height={y(7) - y(8.5)} fill={C.para} opacity={0.10} />
+        {[7, 8.5].map(v => <line key={v} x1={padL} x2={W - padR} y1={y(v)} y2={y(v)} stroke={C.para} strokeWidth={1} strokeDasharray="3 4" opacity={0.5} />)}
+        <text x={W - padR} y={y(8.5) - 4} fontSize={8.5} fill={C.para} textAnchor="end" opacity={0.9}>理想 7〜8.5h</text>
+        {[0, 3, 6, 9].map(v => (
+          <g key={v}>
+            <line x1={padL} x2={W - padR} y1={y(v)} y2={y(v)} stroke={v === 0 ? C.axis : C.grid} strokeWidth={1} />
+            <text x={padL - 6} y={y(v) + 3.5} fontSize={9} fill={C.muted} textAnchor="end">{v}</text>
+          </g>
+        ))}
+        {data.map((d, i) => (
+          <g key={d.date} onClick={() => show((x(i) + bw / 2) / W * 100, y(d.hours) / H * 100, `${d.hours}時間`, fmtMDW(d.date))}>
+            <rect x={x(i)} y={y(d.hours)} width={bw} height={Math.max(2, y(0) - y(d.hours))} rx={4} fill={C.peri} />
+            <rect x={x(i) - 4} y={padT} width={bw + 8} height={ih} fill="transparent" />
+            <text x={x(i) + bw / 2} y={H - 8} fontSize={9} fill={C.muted} textAnchor="middle">{fmtMD(d.date)}</text>
+          </g>
+        ))}
+        <text x={x(n - 1) + bw / 2} y={y(data[n - 1].hours) - 5} fontSize={11} fontWeight="700" fill="#eef1f8" textAnchor="middle">{data[n - 1].hours}</text>
+      </svg>
+      <TipView tip={tip} />
+    </div>
+  );
+}
+
+// 自律神経バランス（ダイバージング: 交感 ↔ 副交感）
+function BalanceGauge({ value }) {
+  const info = autonomicLabel(value);
+  const pct = clamp(value, -100, 100);
+  const half = Math.abs(pct) / 2; // 中央から左右へ最大50%
+  return (
+    <div>
+      <div className="flex justify-between text-[11px] font-bold mb-1.5">
+        <span style={{ color: '#f0968c' }}>⚡ 交感神経<span className="text-night-200 font-medium">（アクセル）</span></span>
+        <span style={{ color: '#4cc2ae' }}>🌙 副交感神経<span className="text-night-200 font-medium">（ブレーキ）</span></span>
+      </div>
+      <div className="relative h-4 rounded-full" style={{ background: C.night500 }}>
+        <div className="absolute top-0 bottom-0 w-[2px] left-1/2 -translate-x-1/2 rounded" style={{ background: '#3c4763' }} />
+        <div className="absolute top-0 bottom-0 rounded-full transition-all duration-700"
+          style={pct >= 0
+            ? { left: '50%', width: half + '%', background: C.para }
+            : { right: '50%', width: half + '%', background: C.symp }} />
+        <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 rounded-full border-[3px] transition-all duration-700"
+          style={{ left: (50 + pct / 2) + '%', background: '#eef1f8', borderColor: pct >= 0 ? C.para : C.symp }} />
+      </div>
+      <div className="flex justify-between text-[9px] text-night-300 mt-1"><span>-100</span><span>0</span><span>+100</span></div>
+      <p className="text-[12.5px] font-black text-cream-50 mt-1.5">{info.short}<span className="text-night-200 font-medium text-[11px] ml-1.5">{info.label}</span></p>
+    </div>
+  );
+}
+
+// スコアリング（スタットタイル用）
+function ScoreRing({ score, size = 108, sub = '睡眠スコア', showLabel = true }) {
+  const sw = 9, r = (size - sw) / 2, cx = size / 2;
+  const circ = 2 * Math.PI * r;
+  const col = scoreLabel(score).color;
+  return (
+    <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90">
+        <circle cx={cx} cy={cx} r={r} fill="none" stroke={C.night500} strokeWidth={sw} />
+        <circle cx={cx} cy={cx} r={r} fill="none" stroke={col} strokeWidth={sw} strokeLinecap="round"
+          strokeDasharray={`${circ * score / 100} ${circ}`} style={{ transition: 'stroke-dasharray .8s ease' }} />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-[26px] leading-none font-black text-cream-50">{score}<span className="text-[11px] font-bold text-night-200">点</span></span>
+        {showLabel && <span className="text-[9.5px] font-bold mt-1" style={{ color: col }}>{scoreLabel(score).label}</span>}
+        <span className="text-[8.5px] text-night-200 mt-0.5">{sub}</span>
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   SECTION 8: アプリ共通コンテキスト
+   ============================================================ */
+const Ctx = createContext(null);
+const useApp = () => useContext(Ctx);
+
+function xpDoneToday(state, reason) {
+  const t = todayStr();
+  return (state.xpLog || []).some(x => x.date === t && x.reason === reason);
+}
+function xpCountToday(state, reason) {
+  const t = todayStr();
+  return (state.xpLog || []).filter(x => x.date === t && x.reason === reason).length;
+}
+function ticketRemaining(state) {
+  const t = todayStr();
+  return (state.tickets || []).filter(tk => tk.expiresAt >= t).reduce((a, tk) => a + (tk.total - tk.used), 0);
+}
+function calcStreak(state) {
+  let d = todayStr(), n = 0;
+  if (!state.sleepLogs[d]) d = addDays(d, -1);
+  while (state.sleepLogs[d]) { n++; d = addDays(d, -1); }
+  return n;
+}
+function soupyMoodOf(state) {
+  const logs = recentLogs(state, 3);
+  if (!logs.length) return 'sleep';
+  const a = avg(logs.map(l => l.score));
+  if (a >= 78) return 'happy';
+  if (a < 55) return 'tired';
+  return 'sleep';
+}
+
+function SpeechBubble({ text, onClick }) {
+  return (
+    <div onClick={onClick} className="relative bg-cream-100 text-night-800 rounded-2xl px-4 py-3 text-[12.5px] font-bold leading-relaxed shadow-lg anim-pop">
+      {text}
+      <div className="absolute -bottom-2 left-10 w-4 h-4 bg-cream-100 rotate-45 rounded-sm" />
+    </div>
+  );
+}
+
+/* ============================================================
+   SECTION 9: ホーム画面
+   ============================================================ */
+function MissionList() {
+  const { state, nav } = useApp();
+  const items = [
+    { icon: '🌙', label: 'ゆうべの睡眠を記録する', xp: 12, done: !!state.sleepLogs[todayStr()], go: () => nav('sleep', { open: true }) },
+    { icon: '🤸', label: 'ストレッチを1回やる', xp: 15, done: xpCountToday(state, 'ストレッチ') > 0, go: () => nav('care') },
+    { icon: '📖', label: '「まなぶ」を1つ読む', xp: 10, done: xpDoneToday(state, 'まなぶ'), go: () => nav('care', { tab: 'learn' }) },
+    { icon: '💛', label: 'スーピーくんをなでる', xp: 2, done: xpCountToday(state, 'なでなで') >= 5, go: () => nav('soupy') },
+  ];
+  return (
+    <div className="card p-2">
+      {items.map((m, i) => (
+        <button key={i} onClick={m.go} className="btn-press w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-night-500/30 text-left">
+          <span className={`w-8 h-8 rounded-full flex items-center justify-center text-[15px] ${m.done ? 'bg-cpara/20' : 'bg-night-500'}`}>{m.icon}</span>
+          <span className={`flex-1 text-[12.5px] font-bold ${m.done ? 'text-night-300 line-through' : 'text-cream-50'}`}>{m.label}</span>
+          {m.done
+            ? <span className="text-[11px] font-black" style={{ color: '#4cc2ae' }}>クリア✓</span>
+            : <span className="text-[11px] font-black text-moon-400">+{m.xp} XP</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function RecCard({ rec }) {
+  const { nav } = useApp();
+  return (
+    <div className="card p-4 anim-slide-up">
+      <div className="flex items-center gap-2 mb-1.5">
+        <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-moon-400/15 text-moon-300 border border-moon-400/30">気づき</span>
+        <p className="text-[13px] font-black text-cream-50">{rec.issue.label}</p>
+      </div>
+      <p className="text-[10.5px] text-night-200 mb-2">{rec.issue.evidence}</p>
+      <p className="text-[12px] text-night-100 leading-relaxed mb-3">{rec.msg}</p>
+      <div className="flex flex-wrap gap-1.5">
+        {rec.stretch.map(id => STRETCH[id] && (
+          <Chip key={id} onClick={() => nav('stretchPlay', { id })}>{STRETCH[id].emoji} {STRETCH[id].name}</Chip>
+        ))}
+        {rec.product.map(id => PRODUCT[id] && (
+          <Chip key={id} onClick={() => nav('product', { id })}>{PRODUCT[id].emoji} {PRODUCT[id].name}</Chip>
+        ))}
+        {rec.article.map(id => {
+          const a = ARTICLES.find(x => x.id === id);
+          return a ? <Chip key={id} onClick={() => nav('article', { id })}>{a.emoji} {a.title}</Chip> : null;
+        })}
+      </div>
+    </div>
+  );
+}
+
+function HomeScreen() {
+  const { state, update, nav } = useApp();
+  const t = todayStr();
+  const todayLog = state.sleepLogs[t];
+  const lastLog = recentLogs(state, 1)[0];
+  const remaining = ticketRemaining(state);
+  const streak = calcStreak(state);
+  const mood = soupyMoodOf(state);
+  const recs = useMemo(() => buildRecommendations(state), [state]);
+  const hour = new Date().getHours();
+  const greet = hour < 4 ? 'こんばんは' : hour < 11 ? 'おはようございます' : hour < 18 ? 'こんにちは' : 'こんばんは';
+  const { lv } = levelFromXp(state.soupy.xp);
+
+  const bubbles = [];
+  if (!todayLog && hour >= 5) bubbles.push('ゆうべはねむれた？きろくを見せてほしいな🌙');
+  if (recs[0]) bubbles.push(recs[0].msg);
+  if (remaining > 0) bubbles.push(`回数券はあと${remaining}回分あるよ。つぎはいつ来てくれる？`);
+  if (streak >= 3) bubbles.push(`${streak}日れんぞくで記録中！すごい！ぼくもうれしい〜`);
+  if (!bubbles.length) bubbles.push('ぐっすりねむれるからだ、いっしょにつくろうね');
+  const bubble = bubbles[new Date().getDate() % bubbles.length];
+
+  const pet = () => {
+    if (xpCountToday(state, 'なでなで') >= 5) return;
+    update(st => gainXp(st, 2, 'なでなで'));
+    toast('+2 XP スーピーくんがよろこんでいる！', 'xp');
+  };
+
+  return (
+    <div className="pb-4">
+      {/* トップバー */}
+      <div className="flex items-center gap-3 px-4 pt-4 pb-2">
+        <img src="assets/logo.jpg" alt="SLEEPY" className="w-10 h-10 rounded-2xl object-cover border border-night-400/50"
+          onError={e => { e.currentTarget.style.display = 'none'; }} />
+        <div className="flex-1">
+          <p className="text-[10.5px] text-night-200 font-bold">睡眠整体サロン SLEEPY</p>
+          <p className="text-[15px] font-black text-cream-50">{greet}、{state.profile.name || 'ゲスト'}さん</p>
+        </div>
+        <button onClick={() => nav('member')} className="btn-press relative w-10 h-10 rounded-full bg-night-600 border border-night-400/50 flex items-center justify-center text-[16px]" aria-label="会員証">
+          🎫
+          {remaining > 0 && <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-moon-400 text-night-900 text-[10px] font-black flex items-center justify-center">{remaining}</span>}
+        </button>
+        <button onClick={() => nav('settings')} className="btn-press w-10 h-10 rounded-full bg-night-600 border border-night-400/50 flex items-center justify-center text-[15px]" aria-label="設定">⚙️</button>
+      </div>
+
+      {/* スーピーくんヒーロー */}
+      <div className="px-4 mt-1">
+        <NightSky className="rounded-3xl border border-night-500/60" dense>
+          <div className="px-4 pt-4">
+            <SpeechBubble text={bubble} />
+          </div>
+          <div className="flex items-end justify-center pb-1 pt-1">
+            <Soupy size={190} mood={mood} wearing={state.soupy.wearing} onTap={pet} title="スーピーくんをなでる" />
+          </div>
+          <div className="flex items-center justify-center gap-2 pb-3">
+            <span className="text-[10.5px] font-black px-2.5 py-1 rounded-full bg-night-900/60 text-moon-300 border border-moon-400/30">Lv.{lv} {stageTitle(lv)}</span>
+            <span className="text-[10.5px] font-bold px-2.5 py-1 rounded-full bg-night-900/60 text-night-100 border border-night-400/40">タップしてなでなで</span>
+          </div>
+        </NightSky>
+      </div>
+
+      {/* 来店フロー再開バナー */}
+      {state.visitFlow && (
+        <div className="px-4 mt-3">
+          <button onClick={() => nav('visit')} className="btn-press w-full card p-3.5 flex items-center gap-3 border-moon-400/40" style={{ borderColor: 'rgba(246,217,126,.35)' }}>
+            <span className="text-xl">🏥</span>
+            <span className="flex-1 text-left">
+              <span className="block text-[13px] font-black text-cream-50">ご来店中：本日の流れをつづける</span>
+              <span className="block text-[10.5px] text-night-200">タップして来店ガイドにもどる</span>
+            </span>
+            <span className="text-moon-400 font-black">→</span>
+          </button>
+        </div>
+      )}
+
+      {/* ステータス列 */}
+      <div className="px-4 mt-3 grid grid-cols-3 gap-2.5">
+        <button onClick={() => nav('sleep')} className="btn-press card p-3 flex flex-col items-center">
+          {lastLog
+            ? <ScoreRing score={lastLog.score} size={84} sub={fmtMD(lastLog.date)} showLabel={false} />
+            : <div className="h-[84px] flex flex-col items-center justify-center"><span className="text-2xl">🌙</span><span className="text-[10px] text-night-200 mt-1 font-bold">未記録</span></div>}
+          <span className="text-[10px] font-bold text-night-200 mt-1.5">睡眠スコア</span>
+        </button>
+        <button onClick={() => nav('member')} className="btn-press card p-3 flex flex-col items-center justify-center">
+          <span className="text-[30px] leading-none font-black text-cream-50 mt-3">{remaining}<span className="text-[11px] text-night-200 font-bold">回</span></span>
+          <span className="text-[9.5px] text-night-300 mt-1">のこり</span>
+          <span className="text-[10px] font-bold text-night-200 mt-2.5">回数券ざんだか</span>
+        </button>
+        <button onClick={() => nav('sleep')} className="btn-press card p-3 flex flex-col items-center justify-center">
+          <span className="text-[30px] leading-none font-black text-cream-50 mt-3">{streak}<span className="text-[11px] text-night-200 font-bold">日</span></span>
+          <span className="text-[9.5px] text-night-300 mt-1">れんぞく</span>
+          <span className="text-[10px] font-bold text-night-200 mt-2.5">きろく継続</span>
+        </button>
+      </div>
+
+      {/* クイックアクション */}
+      <div className="px-4 mt-3 grid grid-cols-4 gap-2">
+        {[
+          { icon: '📝', label: '睡眠を記録', go: () => nav('sleep', { open: true }) },
+          { icon: '📸', label: '姿勢分析', go: () => nav('posture') },
+          { icon: '🏥', label: '来店ガイド', go: () => nav('visit') },
+          { icon: '🧘', label: 'ストレッチ', go: () => nav('care') },
+        ].map((a, i) => (
+          <button key={i} onClick={a.go} className="btn-press card-deep p-3 flex flex-col items-center gap-1.5">
+            <span className="text-[22px]">{a.icon}</span>
+            <span className="text-[10px] font-bold text-night-100">{a.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* 自律神経バランス（最新） */}
+      {lastLog && (
+        <div className="px-4 mt-4">
+          <SectionTitle icon="⚖️" title="自律神経バランス" sub={`${fmtMDW(lastLog.date)} の記録から推定`}
+            right={<button onClick={() => nav('article', { id: 'a_ans' })} className="text-[11px] font-bold text-moon-300">しくみを知る →</button>} />
+          <div className="card p-4">
+            <BalanceGauge value={lastLog.balance ?? calcAutonomic(lastLog)} />
+          </div>
+        </div>
+      )}
+
+      {/* 今日のミッション */}
+      <div className="px-4 mt-4">
+        <SectionTitle icon="⭐" title="きょうのミッション" sub="クリアするとスーピーくんが育ちます" />
+        <MissionList />
+      </div>
+
+      {/* あなたへのおすすめ */}
+      <div className="px-4 mt-4">
+        <SectionTitle icon="💡" title="スーピーくんの気づき" sub="睡眠記録と姿勢分析から自動で提案します" />
+        {recs.length > 0 ? (
+          <div className="flex flex-col gap-2.5">
+            {recs.slice(0, 2).map((r, i) => <RecCard key={i} rec={r} />)}
+          </div>
+        ) : (
+          <div className="card p-4 flex items-center gap-3">
+            <Soupy size={52} mood="happy" animate={false} showZzz={false} />
+            <p className="text-[12px] font-bold text-night-100 leading-relaxed">いまのところ大きな課題はナシ！この調子で記録をつづけると、変化があったときにすぐ気づけるよ🌟</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   SECTION 10: すいみん画面（記録・スコア・チャート・履歴）
+   ============================================================ */
+function MoonRating({ value, onChange, size = 30 }) {
+  return (
+    <div className="flex gap-1.5">
+      {[1, 2, 3, 4, 5].map(v => (
+        <button key={v} onClick={() => onChange && onChange(v)} className="btn-press" style={{ fontSize: size * 0.8, lineHeight: 1, filter: v <= value ? 'none' : 'grayscale(1) opacity(.35)' }}>
+          🌙
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SleepLogForm({ date, initial, onSave, onClose }) {
+  const [bed, setBed] = useState(initial?.bed || '23:30');
+  const [wake, setWake] = useState(initial?.wake || '06:30');
+  const [quality, setQuality] = useState(initial?.quality || 3);
+  const [awakenings, setAwakenings] = useState(initial?.awakenings ?? 0);
+  const [feel, setFeel] = useState(initial?.feel || 2);
+  const [habits, setHabits] = useState(initial?.habits || []);
+  const [tipFor, setTipFor] = useState(null);
+  const hours = sleepHours(bed, wake);
+
+  const toggleHabit = id => setHabits(h => h.includes(id) ? h.filter(x => x !== id) : [...h, id]);
+  const preview = calcSleepScore({ bed, wake, quality, awakenings, feel, habits });
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="text-[16px] font-black text-cream-50">🌙 {fmtMDW(date)} のねむり</h3>
+          <p className="text-[11px] text-night-200 mt-0.5">きのうの夜〜けさの記録</p>
+        </div>
+        <div className="text-right">
+          <span className="text-[22px] font-black text-moon-400">{preview}</span>
+          <span className="text-[10px] text-night-200 font-bold">点</span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <label className="card-deep p-3 block">
+          <span className="text-[10.5px] font-bold text-night-200">🛏️ ねた時間</span>
+          <input type="time" value={bed} onChange={e => setBed(e.target.value)}
+            className="mt-1 w-full bg-transparent text-[20px] font-black text-cream-50 outline-none" />
+        </label>
+        <label className="card-deep p-3 block">
+          <span className="text-[10.5px] font-bold text-night-200">⏰ おきた時間</span>
+          <input type="time" value={wake} onChange={e => setWake(e.target.value)}
+            className="mt-1 w-full bg-transparent text-[20px] font-black text-cream-50 outline-none" />
+        </label>
+      </div>
+      <p className="text-[11.5px] text-night-100 font-bold -mt-2 mb-4 text-center">睡眠時間 <span className="text-moon-300">{hours}時間</span>{hours >= 7 && hours <= 8.5 ? '（理想ゾーン🎉）' : ''}</p>
+
+      <div className="mb-4">
+        <p className="text-[12px] font-bold text-night-100 mb-1.5">ねむりの質（ぐっすり度）</p>
+        <MoonRating value={quality} onChange={setQuality} />
+      </div>
+
+      <div className="mb-4 flex items-center justify-between">
+        <p className="text-[12px] font-bold text-night-100">夜中に目がさめた回数</p>
+        <div className="flex items-center gap-3">
+          <button onClick={() => setAwakenings(a => Math.max(0, a - 1))} className="btn-press w-8 h-8 rounded-full bg-night-500 font-black">−</button>
+          <span className="w-8 text-center text-[18px] font-black text-cream-50">{awakenings}</span>
+          <button onClick={() => setAwakenings(a => Math.min(9, a + 1))} className="btn-press w-8 h-8 rounded-full bg-night-500 font-black">＋</button>
+        </div>
+      </div>
+
+      <div className="mb-4">
+        <p className="text-[12px] font-bold text-night-100 mb-1.5">朝おきたときの気分</p>
+        <div className="grid grid-cols-3 gap-2">
+          {FEELS.map(f => (
+            <button key={f.v} onClick={() => setFeel(f.v)}
+              className={`btn-press p-2.5 rounded-xl border text-center ${feel === f.v ? 'bg-cream-100 text-night-900 border-cream-100' : 'bg-night-600 text-night-100 border-night-400/40'}`}>
+              <span className="block text-[18px]">{f.icon}</span>
+              <span className="block text-[10.5px] font-bold mt-0.5">{f.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mb-5">
+        <p className="text-[12px] font-bold text-night-100 mb-0.5">きのうの行動チェック</p>
+        <p className="text-[10.5px] text-night-200 mb-2">行動はぜんぶ自律神経とつながっています。ⓘで理由がわかるよ</p>
+        <div className="flex flex-col gap-1.5">
+          {HABITS.map(h => (
+            <div key={h.id} className={`rounded-xl border transition ${habits.includes(h.id) ? (h.good ? 'border-cpara/50 bg-cpara/10' : 'border-csymp/50 bg-csymp/10') : 'border-night-400/40 bg-night-600'}`}>
+              <div className="flex items-center gap-2 px-3 py-2">
+                <button onClick={() => toggleHabit(h.id)} className="btn-press flex items-center gap-2 flex-1 text-left">
+                  <span className="text-[15px]">{h.icon}</span>
+                  <span className="text-[12px] font-bold text-cream-50">{h.label}</span>
+                </button>
+                <span className={`text-[9.5px] font-black px-1.5 py-0.5 rounded ${h.good ? 'text-[#4cc2ae] bg-cpara/15' : 'text-[#f0968c] bg-csymp/15'}`}>{h.good ? '副交感+' : '交感+'}</span>
+                <button onClick={() => setTipFor(tipFor === h.id ? null : h.id)} className="btn-press text-night-200 text-[13px] w-6 h-6 rounded-full bg-night-500/60">ⓘ</button>
+              </div>
+              {tipFor === h.id && <p className="px-3 pb-2.5 text-[11px] text-night-100 leading-relaxed anim-slide-up">{h.tip}</p>}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex gap-2">
+        <Btn kind="ghost" onClick={onClose}>とじる</Btn>
+        <Btn kind="moon" full onClick={() => onSave({ bed, wake, quality, awakenings, feel, habits })}>きろくする</Btn>
+      </div>
+    </div>
+  );
+}
+
+function LogResult({ date, log }) {
+  const { nav } = useApp();
+  const balance = log.balance ?? calcAutonomic(log);
+  const info = autonomicLabel(balance);
+  const hours = sleepHours(log.bed, log.wake);
+  return (
+    <div>
+      <div className="flex items-center gap-4">
+        <ScoreRing score={log.score} size={110} sub={fmtMD(date)} />
+        <div className="flex-1 text-[11.5px] text-night-100 space-y-1">
+          <p>🛏️ {log.bed} → ⏰ {log.wake}<span className="text-night-200">（{hours}h）</span></p>
+          <p>🌙 質 {'🌙'.repeat(log.quality)}<span className="text-night-300">{'・'.repeat(5 - log.quality)}</span></p>
+          <p>👀 中途覚醒 {log.awakenings}回 ／ {FEELS.find(f => f.v === log.feel)?.icon} {FEELS.find(f => f.v === log.feel)?.label}</p>
+          {(log.habits || []).length > 0 && <p className="leading-relaxed">{log.habits.map(id => HABIT[id]?.icon).join(' ')}</p>}
+        </div>
+      </div>
+      <div className="mt-4"><BalanceGauge value={balance} /></div>
+      <div className="mt-3 card-deep p-3.5 flex gap-2.5">
+        <div className="shrink-0 -mt-1"><Soupy size={46} mood={log.score >= 70 ? 'happy' : 'sleep'} animate={false} showZzz={false} /></div>
+        <p className="text-[11.5px] text-night-100 leading-relaxed">{info.advice}</p>
+      </div>
+      {(log.habits || []).filter(id => !HABIT[id]?.good).slice(0, 1).map(id => (
+        <button key={id} onClick={() => nav('article', { id: { caffeine: 'a_caffeine', phone: 'a_phone', alcohol: 'a_alcohol', lateMeal: 'a_bath', longNap: 'a_weekend' }[id] || 'a_ans' })}
+          className="btn-press mt-2 w-full text-left card p-3 flex items-center gap-2">
+          <span>{HABIT[id].icon}</span>
+          <span className="flex-1 text-[11.5px] font-bold text-cream-50">「{HABIT[id].label}」が眠りに与える影響を知る</span>
+          <span className="text-moon-300">→</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SleepScreen({ route }) {
+  const { state, update, nav } = useApp();
+  const [formDate, setFormDate] = useState(route?.params?.open ? todayStr() : null);
+  const [detail, setDetail] = useState(null);
+  const t = todayStr();
+  const todayLog = state.sleepLogs[t];
+  const logs7 = recentLogs(state, 7);
+  const trend = logs7.map(l => ({ date: l.date, score: l.score }));
+  const hoursData = logs7.map(l => ({ date: l.date, hours: sleepHours(l.bed, l.wake) }));
+  const allDates = Object.keys(state.sleepLogs).sort().reverse().slice(0, 14);
+
+  const save = (date, data) => {
+    const log = { ...data };
+    log.score = calcSleepScore(log);
+    log.balance = calcAutonomic(log);
+    update(st => {
+      st.sleepLogs[date] = log;
+      if (date === t && !xpDoneToday(st, '睡眠記録')) { gainXp(st, 12, '睡眠記録'); }
+    });
+    setFormDate(null);
+    toast(`きろくしました！睡眠スコア ${log.score}点`, 'xp');
+  };
+
+  return (
+    <div className="pb-4">
+      <div className="px-4 pt-5 pb-1 flex items-center justify-between">
+        <div>
+          <h1 className="text-[19px] font-black text-cream-50">すいみん</h1>
+          <p className="text-[11px] text-night-200 mt-0.5">ねむりを見える化して、自律神経を整えよう</p>
+        </div>
+        <Soupy size={54} mood="sleep" animate={false} />
+      </div>
+
+      {/* 今日の記録 */}
+      <div className="px-4 mt-3">
+        {todayLog ? (
+          <div className="card p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-[13.5px] font-black text-cream-50">けさの記録</h2>
+              <button onClick={() => setFormDate(t)} className="text-[11px] font-bold text-moon-300">編集する</button>
+            </div>
+            <LogResult date={t} log={todayLog} />
+          </div>
+        ) : (
+          <NightSky className="rounded-3xl border border-night-500/60">
+            <div className="p-4 flex items-center gap-3">
+              <Soupy size={84} mood="sleep" />
+              <div className="flex-1">
+                <p className="text-[13.5px] font-black text-cream-50 leading-snug">ゆうべのねむりを<br />おしえてね</p>
+                <p className="text-[10.5px] text-night-100 mt-1 mb-2.5">1分でOK！ +12 XP</p>
+                <Btn kind="moon" small onClick={() => setFormDate(t)}>📝 きろくする</Btn>
+              </div>
+            </div>
+          </NightSky>
+        )}
+      </div>
+
+      {/* チャート */}
+      <div className="px-4 mt-4">
+        <SectionTitle icon="📈" title="睡眠スコアの推移" sub="この7日間" />
+        <div className="card p-3.5 pt-4">
+          <TrendChart data={trend} />
+        </div>
+      </div>
+      <div className="px-4 mt-3">
+        <SectionTitle icon="⏱️" title="睡眠時間" sub="理想ゾーンは7〜8.5時間" />
+        <div className="card p-3.5 pt-4">
+          <HoursBars data={hoursData} />
+        </div>
+      </div>
+
+      {/* 履歴 */}
+      <div className="px-4 mt-4">
+        <SectionTitle icon="🗓️" title="これまでの記録"
+          right={<button onClick={() => setFormDate(addDays(t, -1))} className="text-[11px] font-bold text-moon-300">過去の日をつける＋</button>} />
+        {allDates.length === 0 && <div className="card"><EmptyState text="まだ記録がありません" sub="今夜から始めてみましょう" /></div>}
+        <div className="flex flex-col gap-1.5">
+          {allDates.map(d => {
+            const l = state.sleepLogs[d];
+            const sl = scoreLabel(l.score);
+            return (
+              <button key={d} onClick={() => setDetail(d)} className="btn-press card px-3.5 py-2.5 flex items-center gap-3">
+                <span className="text-[11px] font-bold text-night-200 w-16 text-left">{fmtMDW(d)}</span>
+                <span className="text-[15px] font-black" style={{ color: sl.color }}>{l.score}<span className="text-[9px]">点</span></span>
+                <div className="flex-1"><ProgressBar pct={l.score} color={sl.color} h={5} /></div>
+                <span className="text-[10.5px] text-night-200 font-bold">{sleepHours(l.bed, l.wake)}h</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 記録フォーム */}
+      <Modal open={!!formDate} onClose={() => setFormDate(null)}>
+        {formDate && (
+          <div>
+            <div className="flex gap-1.5 mb-3 overflow-x-auto no-scrollbar">
+              {[0, -1, -2, -3].map(off => {
+                const d = addDays(t, off);
+                return <Chip key={d} active={formDate === d} onClick={() => setFormDate(d)}>{off === 0 ? 'きょう' : fmtMDW(d)}</Chip>;
+              })}
+            </div>
+            <SleepLogForm key={formDate} date={formDate} initial={state.sleepLogs[formDate]} onSave={data => save(formDate, data)} onClose={() => setFormDate(null)} />
+          </div>
+        )}
+      </Modal>
+
+      {/* 履歴詳細 */}
+      <Modal open={!!detail} onClose={() => setDetail(null)} title={detail ? `🌙 ${fmtJP(detail)}` : ''}>
+        {detail && state.sleepLogs[detail] && (
+          <div>
+            <LogResult date={detail} log={state.sleepLogs[detail]} />
+            <div className="mt-4 flex gap-2">
+              <Btn kind="ghost" full onClick={() => { setFormDate(detail); setDetail(null); }}>編集する</Btn>
+              <Btn kind="primary" full onClick={() => setDetail(null)}>OK</Btn>
+            </div>
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
+/* ============================================================
+   SECTION 11: そだてる画面（スーピーくん育成）
+   ============================================================ */
+function SoupyScreen() {
+  const { state, update, nav } = useApp();
+  const { lv, cur, need } = levelFromXp(state.soupy.xp);
+  const mood = soupyMoodOf(state);
+  const petsToday = xpCountToday(state, 'なでなで');
+  const totalPets = (state.xpLog || []).filter(x => x.reason === 'なでなで').length;
+  const friendship = Math.min(5, 1 + Math.floor(totalPets / 15));
+
+  const pet = () => {
+    if (petsToday >= 5) { toast('きょうはもうおなかいっぱい…また明日なでてね💤'); return; }
+    update(st => gainXp(st, 2, 'なでなで'));
+    toast('+2 XP スーピーくんがよろこんでいる！', 'xp');
+  };
+
+  const toggleWear = (id) => {
+    update(st => {
+      const w = st.soupy.wearing;
+      st.soupy.wearing = w.includes(id) ? w.filter(x => x !== id) : [...w, id];
+    });
+  };
+
+  return (
+    <div className="pb-4">
+      <div className="px-4 pt-5 pb-1">
+        <h1 className="text-[19px] font-black text-cream-50">そだてる</h1>
+        <p className="text-[11px] text-night-200 mt-0.5">よいねむりと来店で、スーピーくんが育ちます</p>
+      </div>
+
+      <div className="px-4 mt-3">
+        <NightSky className="rounded-3xl border border-night-500/60" dense>
+          <div className="pt-5 flex justify-center">
+            <Soupy size={215} mood={mood} wearing={state.soupy.wearing} onTap={pet} />
+          </div>
+          <div className="text-center pb-4 px-4">
+            <p className="text-[15px] font-black text-cream-50 mt-1">スーピーくん <span className="text-moon-300">Lv.{lv}</span></p>
+            <p className="text-[11px] text-moon-300 font-bold">「{stageTitle(lv)}」</p>
+            <div className="mt-2.5 max-w-[260px] mx-auto">
+              <ProgressBar pct={cur / need * 100} color={C.moon} />
+              <p className="text-[10px] text-night-100 mt-1 font-bold">つぎのレベルまで あと {need - cur} XP</p>
+            </div>
+            <p className="text-[10px] text-night-200 mt-2">なでなで きょう {petsToday}/5回</p>
+          </div>
+        </NightSky>
+      </div>
+
+      {/* なかよし度 */}
+      <div className="px-4 mt-3 grid grid-cols-2 gap-2.5">
+        <div className="card p-3.5 text-center">
+          <p className="text-[10.5px] font-bold text-night-200">なかよし度</p>
+          <p className="text-[18px] mt-1">{'💛'.repeat(friendship)}<span className="opacity-25">{'💛'.repeat(5 - friendship)}</span></p>
+          <p className="text-[9.5px] text-night-300 mt-1">なでた回数 {totalPets}回</p>
+        </div>
+        <div className="card p-3.5 text-center">
+          <p className="text-[10.5px] font-bold text-night-200">ごきげん</p>
+          <p className="text-[18px] mt-1">{mood === 'happy' ? '😊 ごきげん' : mood === 'tired' ? '🥱 おつかれ' : '😴 すやすや'}</p>
+          <p className="text-[9.5px] text-night-300 mt-1">最近の睡眠スコアで変化</p>
+        </div>
+      </div>
+
+      {/* ミッション */}
+      <div className="px-4 mt-4">
+        <SectionTitle icon="⭐" title="きょうのミッション" sub="XPをあつめてレベルアップ！" />
+        <MissionList />
+      </div>
+
+      {/* きせかえ */}
+      <div className="px-4 mt-4">
+        <SectionTitle icon="🎀" title="きせかえ" sub="レベルが上がるとアイテムがふえるよ" />
+        <div className="grid grid-cols-3 gap-2">
+          {ACCESSORIES.map(a => {
+            const unlocked = lv >= a.lv;
+            const on = state.soupy.wearing.includes(a.id);
+            return (
+              <button key={a.id} disabled={!unlocked} onClick={() => toggleWear(a.id)}
+                className={`btn-press card p-3 text-center relative ${on ? 'ring-2 ring-moon-400' : ''} ${unlocked ? '' : 'opacity-45'}`}>
+                <span className="text-[24px]">{unlocked ? a.emoji : '🔒'}</span>
+                <span className="block text-[10px] font-bold text-night-100 mt-1">{a.name}</span>
+                <span className="block text-[9px] text-night-300 mt-0.5">{unlocked ? (on ? 'そうび中' : 'タップでそうび') : `Lv.${a.lv}でかいほう`}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* XPのしくみ */}
+      <div className="px-4 mt-4">
+        <SectionTitle icon="🌱" title="そだてかた" />
+        <div className="card p-4 text-[11.5px] text-night-100 space-y-1.5">
+          <p>🌙 睡眠を記録する <span className="text-moon-300 font-black">+12 XP</span></p>
+          <p>🤸 ストレッチをする <span className="text-moon-300 font-black">+15 XP</span></p>
+          <p>📖 まなぶ・クイズ正解 <span className="text-moon-300 font-black">+10 XP</span></p>
+          <p>🏥 サロンにご来店 <span className="text-moon-300 font-black">+50 XP</span></p>
+          <p>🛍️ お買いもの <span className="text-moon-300 font-black">+20 XP</span></p>
+          <p>💛 なでなで（1日5回まで） <span className="text-moon-300 font-black">+2 XP</span></p>
+        </div>
+      </div>
+
+      {/* せいちょうのきろく */}
+      <div className="px-4 mt-4">
+        <SectionTitle icon="📜" title="せいちょうのきろく" />
+        <div className="card p-2">
+          {(state.xpLog || []).slice(-8).reverse().map((x, i) => (
+            <div key={i} className="flex items-center gap-3 px-3 py-2 border-b border-night-500/40 last:border-0">
+              <span className="text-[10.5px] text-night-300 w-12">{fmtMD(x.date)}</span>
+              <span className="flex-1 text-[11.5px] font-bold text-night-100">{x.reason}</span>
+              <span className="text-[11px] font-black text-moon-300">+{x.amount} XP</span>
+            </div>
+          ))}
+          {(state.xpLog || []).length === 0 && <EmptyState text="まだ記録がありません" />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   SECTION 12: ケア画面（ストレッチ・まなぶ）
+   ============================================================ */
+function CareScreen({ route }) {
+  const { state, nav } = useApp();
+  const [tab, setTab] = useState(route?.params?.tab || 'stretch');
+  const recs = useMemo(() => buildRecommendations(state), [state]);
+  const recStretchIds = [...new Set(recs.flatMap(r => r.stretch))].slice(0, 3);
+  const doneToday = xpCountToday(state, 'ストレッチ');
+
+  return (
+    <div className="pb-4">
+      <div className="px-4 pt-5 pb-1">
+        <h1 className="text-[19px] font-black text-cream-50">ケア</h1>
+        <p className="text-[11px] text-night-200 mt-0.5">おうちでのケアが、施術の効果を長もちさせます</p>
+      </div>
+      <div className="px-4 mt-2 flex gap-2">
+        <Chip active={tab === 'stretch'} onClick={() => setTab('stretch')}>🤸 ストレッチ</Chip>
+        <Chip active={tab === 'learn'} onClick={() => setTab('learn')}>📖 まなぶ</Chip>
+      </div>
+
+      {tab === 'stretch' && (
+        <div>
+          {doneToday > 0 && (
+            <div className="px-4 mt-3">
+              <div className="card p-3 flex items-center gap-2.5">
+                <span className="text-lg">🎉</span>
+                <p className="text-[12px] font-bold text-cream-50">きょうは {doneToday}回 ストレッチできました！</p>
+              </div>
+            </div>
+          )}
+          {recStretchIds.length > 0 && (
+            <div className="px-4 mt-3">
+              <SectionTitle icon="💡" title="いまのあなたにおすすめ" sub="睡眠記録・姿勢分析から選びました" />
+              <div className="flex gap-2.5 overflow-x-auto no-scrollbar pb-1 -mx-4 px-4">
+                {recStretchIds.map(id => {
+                  const s = STRETCH[id];
+                  return (
+                    <button key={id} onClick={() => nav('stretchPlay', { id })} className="btn-press shrink-0 w-[200px] rounded-3xl p-4 text-left border border-moon-400/30"
+                      style={{ background: 'linear-gradient(135deg,#2b3a5e, #222e4c)' }}>
+                      <span className="text-[26px]">{s.emoji}</span>
+                      <p className="text-[13px] font-black text-cream-50 mt-1.5 leading-snug">{s.name}</p>
+                      <p className="text-[10px] text-night-200 mt-1">{s.area}・約{s.mins}分</p>
+                      <span className="inline-block mt-2 text-[10.5px] font-black text-night-900 bg-moon-400 rounded-full px-2.5 py-1">はじめる ▶</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          <div className="px-4 mt-4">
+            <SectionTitle icon="🧘" title="ストレッチずかん" sub="ぜんぶ自律神経へのはたらき付き" />
+            <div className="flex flex-col gap-2">
+              {STRETCHES.map(s => (
+                <button key={s.id} onClick={() => nav('stretchPlay', { id: s.id })} className="btn-press card p-3.5 flex items-center gap-3 text-left">
+                  <span className="w-11 h-11 rounded-2xl bg-night-500 flex items-center justify-center text-[22px] shrink-0">{s.emoji}</span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-[13px] font-black text-cream-50 truncate">{s.name}</span>
+                    <span className="block text-[10.5px] text-night-200 mt-0.5">{s.area} ・ 約{s.mins}分 ・ {s.when}におすすめ</span>
+                  </span>
+                  <span className="text-[11px] font-black text-moon-300 shrink-0">+15 XP</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'learn' && (
+        <div className="px-4 mt-3">
+          <div className="card-deep p-3.5 mb-3 flex gap-2.5 items-center">
+            <Soupy size={44} animate={false} showZzz={false} />
+            <p className="text-[11.5px] text-night-100 leading-relaxed font-bold">毎日の行動はぜんぶ、自律神経とねむりにつながってるんだ。1日1つ、いっしょに学ぼう！</p>
+          </div>
+          <div className="flex flex-col gap-2">
+            {ARTICLES.map(a => {
+              const read = state.learnRead.includes(a.id);
+              const quizOk = !!state.quizDone[a.id];
+              return (
+                <button key={a.id} onClick={() => nav('article', { id: a.id })} className="btn-press card p-3.5 flex items-center gap-3 text-left">
+                  <span className="w-11 h-11 rounded-2xl bg-night-500 flex items-center justify-center text-[22px] shrink-0">{a.emoji}</span>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-[9.5px] font-black text-moon-300">{a.cat}</span>
+                    <span className="block text-[13px] font-black text-cream-50 leading-snug">{a.title}</span>
+                    <span className="block text-[10.5px] text-night-200 mt-0.5 truncate">{a.lead}</span>
+                  </span>
+                  <span className="shrink-0 text-right">
+                    {read ? <span className="block text-[9.5px] font-black" style={{ color: '#4cc2ae' }}>よんだ✓</span> : <span className="block text-[9.5px] font-black text-moon-300">+10 XP</span>}
+                    {quizOk && <span className="block text-[9.5px] font-black text-moon-300 mt-0.5">クイズ🏅</span>}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ストレッチ実行（ガイド付きタイマー） */
+function StretchPlayScreen({ route }) {
+  const { state, update, back } = useApp();
+  const s = STRETCH[route.params.id];
+  const [phase, setPhase] = useState('intro'); // intro | run | done
+  const [stepIdx, setStepIdx] = useState(0);
+  const [left, setLeft] = useState(0);
+  const [paused, setPaused] = useState(false);
+
+  useEffect(() => {
+    if (phase !== 'run' || paused) return;
+    const iv = setInterval(() => {
+      setLeft(l => {
+        if (l > 1) return l - 1;
+        setStepIdx(i => {
+          if (i + 1 < s.steps.length) { setLeft(s.steps[i + 1].sec); return i + 1; }
+          setPhase('done'); return i;
+        });
+        return 0;
+      });
+    }, 1000);
+    return () => clearInterval(iv);
+  }, [phase, paused, s]);
+
+  useEffect(() => {
+    if (phase === 'done') {
+      update(st => { st.stretchLog.push({ date: todayStr(), stretchId: s.id }); gainXp(st, 15, 'ストレッチ'); });
+      toast('+15 XP おつかれさま！', 'xp');
+    }
+  }, [phase]);
+
+  if (!s) return <div className="p-6"><EmptyState text="ストレッチが見つかりません" /></div>;
+  const step = s.steps[stepIdx];
+  const totalSec = s.steps.reduce((a, x) => a + x.sec, 0);
+  const doneSec = s.steps.slice(0, stepIdx).reduce((a, x) => a + x.sec, 0) + (phase === 'run' ? (step.sec - left) : 0);
+
+  return (
+    <div className="min-h-screen flex flex-col">
+      <BackHeader title={`${s.emoji} ${s.name}`} onBack={back} />
+      {phase === 'intro' && (
+        <div className="p-4 flex-1">
+          <NightSky className="rounded-3xl border border-night-500/60">
+            <div className="p-5 text-center">
+              <span className="text-[52px]">{s.emoji}</span>
+              <h2 className="text-[17px] font-black text-cream-50 mt-2">{s.name}</h2>
+              <p className="text-[11px] text-night-200 mt-1">{s.area} ・ 約{s.mins}分 ・ {s.when}におすすめ</p>
+            </div>
+          </NightSky>
+          <div className="card p-4 mt-3">
+            <p className="text-[11px] font-black text-moon-300 mb-1">✨ からだへの効果</p>
+            <p className="text-[12px] text-night-100 leading-relaxed">{s.effect}</p>
+            <p className="text-[11px] font-black text-moon-300 mb-1 mt-3">⚖️ 自律神経へのはたらき</p>
+            <p className="text-[12px] text-night-100 leading-relaxed">{s.autonomic}</p>
+          </div>
+          <div className="card p-4 mt-3">
+            <p className="text-[11px] font-black text-night-200 mb-2">ながれ（全{s.steps.length}ステップ）</p>
+            {s.steps.map((st2, i) => (
+              <p key={i} className="text-[12px] text-night-100 py-1 border-b border-night-500/40 last:border-0">
+                <span className="text-moon-300 font-black mr-1.5">{i + 1}</span>{st2.text}
+                <span className="text-night-300 text-[10px] ml-1">（{st2.sec}秒）</span>
+              </p>
+            ))}
+          </div>
+          <div className="mt-4 pb-6">
+            <Btn kind="moon" full onClick={() => { setStepIdx(0); setLeft(s.steps[0].sec); setPhase('run'); }}>▶ スタート</Btn>
+          </div>
+        </div>
+      )}
+
+      {phase === 'run' && (
+        <div className="p-4 flex-1 flex flex-col">
+          <ProgressBar pct={doneSec / totalSec * 100} color={C.moon} />
+          <p className="text-[10.5px] text-night-200 font-bold mt-1.5 text-center">ステップ {stepIdx + 1} / {s.steps.length}</p>
+          <div className="flex-1 flex flex-col items-center justify-center text-center">
+            <div className="relative">
+              <svg width="200" height="200" className="-rotate-90">
+                <circle cx="100" cy="100" r="88" fill="none" stroke={C.night500} strokeWidth="10" />
+                <circle cx="100" cy="100" r="88" fill="none" stroke={C.moon} strokeWidth="10" strokeLinecap="round"
+                  strokeDasharray={`${2 * Math.PI * 88 * (left / step.sec)} ${2 * Math.PI * 88}`} style={{ transition: 'stroke-dasharray 1s linear' }} />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-[54px] font-black text-cream-50 leading-none">{left}</span>
+                <span className="text-[11px] text-night-200 font-bold mt-1">びょう</span>
+              </div>
+            </div>
+            <p className="text-[15px] font-black text-cream-50 leading-relaxed mt-6 px-4">{step.text}</p>
+            <div className="mt-5 flex items-center gap-2.5">
+              <Soupy size={64} mood="happy" animate showZzz={false} />
+              <div className="bg-cream-100 text-night-800 rounded-2xl px-3 py-2 text-[11px] font-bold">
+                {left <= 5 ? 'あとちょっと！' : paused ? 'ひとやすみ中…' : 'いいちょうし！ゆっくり呼吸してね'}
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-2 pb-6">
+            <Btn kind="ghost" onClick={() => setPaused(p => !p)}>{paused ? '▶ さいかい' : '⏸ いったんとめる'}</Btn>
+            <Btn kind="outline" full onClick={() => {
+              if (stepIdx + 1 < s.steps.length) { setStepIdx(stepIdx + 1); setLeft(s.steps[stepIdx + 1].sec); }
+              else setPhase('done');
+            }}>つぎへ ▷</Btn>
+          </div>
+        </div>
+      )}
+
+      {phase === 'done' && (
+        <div className="p-4 flex-1 flex flex-col items-center justify-center text-center">
+          <div className="relative">
+            <Soupy size={180} mood="excited" showZzz={false} />
+            {Array.from({ length: 10 }).map((_, i) => (
+              <span key={i} className="absolute left-1/2 top-1/2 text-[18px]" style={{
+                '--tx': `${Math.cos(i / 10 * Math.PI * 2) * 90}px`, '--ty': `${Math.sin(i / 10 * Math.PI * 2) * 90}px`,
+                animation: `star-burst .9s ease-out ${i * 0.05}s both`,
+              }}>{i % 2 ? '⭐' : '✨'}</span>
+            ))}
+          </div>
+          <h2 className="text-[19px] font-black text-cream-50 mt-3">おつかれさまでした！</h2>
+          <p className="text-[12px] text-night-100 mt-2 leading-relaxed">{s.autonomic}</p>
+          <p className="text-[13px] font-black text-moon-300 mt-3">+15 XP ゲット🌟</p>
+          <div className="mt-6 w-full flex gap-2">
+            <Btn kind="ghost" full onClick={() => { setPhase('intro'); }}>もう一回</Btn>
+            <Btn kind="moon" full onClick={back}>おわる</Btn>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* 記事 + クイズ */
+function ArticleScreen({ route }) {
+  const { state, update, back, nav } = useApp();
+  const a = ARTICLES.find(x => x.id === route.params.id);
+  const [picked, setPicked] = useState(null);
+  const answered = picked !== null;
+
+  useEffect(() => {
+    if (a && !state.learnRead.includes(a.id)) {
+      update(st => { st.learnRead.push(a.id); gainXp(st, 10, 'まなぶ'); });
+      toast('+10 XP あたらしい知識をゲット！', 'xp');
+    }
+  }, []);
+
+  if (!a) return <div className="p-6"><EmptyState text="記事が見つかりません" /></div>;
+  const quizDone = !!state.quizDone[a.id];
+
+  const pick = (i) => {
+    if (answered) return;
+    setPicked(i);
+    if (i === a.quiz.answer && !quizDone) {
+      update(st => { st.quizDone[a.id] = true; gainXp(st, 10, 'クイズ正解'); });
+      toast('+10 XP クイズ正解！', 'xp');
+    }
+  };
+
+  return (
+    <div className="min-h-screen">
+      <BackHeader title={`${a.emoji} まなぶ`} onBack={back} />
+      <div className="p-4 pb-8">
+        <span className="text-[10px] font-black text-moon-300 bg-moon-400/10 border border-moon-400/30 rounded-full px-2.5 py-1">{a.cat}</span>
+        <h1 className="text-[19px] font-black text-cream-50 mt-2 leading-snug">{a.title}</h1>
+        <p className="text-[12.5px] text-moon-200 text-night-100 font-bold mt-2">{a.lead}</p>
+        <div className="mt-4 space-y-3">
+          {a.body.map((p, i) => <p key={i} className="text-[13px] text-night-50 leading-[1.9]">{p}</p>)}
+        </div>
+
+        <div className="card-deep p-4 mt-5 flex gap-3 items-start">
+          <Soupy size={52} animate showZzz={false} />
+          <div>
+            <p className="text-[10.5px] font-black text-moon-300 mb-1">スーピーくんのひとこと</p>
+            <p className="text-[12px] text-night-100 leading-relaxed font-bold">{a.point}</p>
+          </div>
+        </div>
+
+        {/* クイズ */}
+        <div className="card p-4 mt-4">
+          <p className="text-[11px] font-black text-moon-300 mb-1.5">🧠 おさらいクイズ {quizDone && '（クリアずみ🏅）'}</p>
+          <p className="text-[13.5px] font-black text-cream-50 leading-snug mb-3">{a.quiz.q}</p>
+          <div className="flex flex-col gap-2">
+            {a.quiz.choices.map((c, i) => {
+              let cls = 'bg-night-600 border-night-400/40 text-night-100';
+              if (answered && i === a.quiz.answer) cls = 'border-cpara text-cream-50 bg-cpara/15';
+              else if (answered && i === picked) cls = 'border-csymp text-cream-50 bg-csymp/15';
+              return (
+                <button key={i} onClick={() => pick(i)} className={`btn-press text-left px-3.5 py-3 rounded-xl border text-[12.5px] font-bold ${cls}`}>
+                  {['Ａ', 'Ｂ', 'Ｃ'][i]}．{c}
+                  {answered && i === a.quiz.answer && ' ⭕'}
+                  {answered && i === picked && i !== a.quiz.answer && ' ❌'}
+                </button>
+              );
+            })}
+          </div>
+          {answered && (
+            <div className="anim-slide-up mt-3 bg-night-700 rounded-xl p-3">
+              <p className="text-[12px] font-black text-cream-50">{picked === a.quiz.answer ? '🎉 せいかい！' : '😢 ざんねん…'}</p>
+              <p className="text-[11.5px] text-night-100 leading-relaxed mt-1">{a.quiz.explain}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-4"><Btn kind="primary" full onClick={back}>よみおわった</Btn></div>
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   SECTION 13: ショップ（EC・回数券・パーソナライズ提案）
+   ============================================================ */
+function cartCount(state) { return (state.cart || []).reduce((a, c) => a + c.qty, 0); }
+
+function ShopScreen() {
+  const { state, update, nav } = useApp();
+  const [cat, setCat] = useState('all');
+  const recs = useMemo(() => buildRecommendations(state), [state]);
+  const recProducts = [...new Set(recs.flatMap(r => r.product.map(id => ({ id, msg: r.msg, label: r.issue.label })).map(JSON.stringify)))].map(JSON.parse).slice(0, 3);
+  const cats = ['all', ...new Set(PRODUCTS.map(p => p.cat))];
+  const shown = PRODUCTS.filter(p => cat === 'all' || p.cat === cat);
+  const count = cartCount(state);
+
+  const add = (id) => {
+    update(st => {
+      const item = st.cart.find(c => c.productId === id);
+      if (item) item.qty++; else st.cart.push({ productId: id, qty: 1 });
+    });
+    toast('カートに入れました 🧺');
+  };
+
+  return (
+    <div className="pb-4 relative">
+      <div className="px-4 pt-5 pb-1 flex items-center justify-between">
+        <div>
+          <h1 className="text-[19px] font-black text-cream-50">ショップ</h1>
+          <p className="text-[11px] text-night-200 mt-0.5">サロン厳選の快眠グッズと回数券</p>
+        </div>
+        <button onClick={() => nav('cart')} className="btn-press relative w-11 h-11 rounded-full bg-night-600 border border-night-400/50 flex items-center justify-center text-[18px]" aria-label="カート">
+          🧺
+          {count > 0 && <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-moon-400 text-night-900 text-[10px] font-black flex items-center justify-center">{count}</span>}
+        </button>
+      </div>
+
+      {/* あなたへのおすすめ */}
+      {recProducts.length > 0 && (
+        <div className="px-4 mt-3">
+          <SectionTitle icon="🎯" title="あなたへのおすすめ" sub="睡眠記録・姿勢分析にもとづく提案です" />
+          <div className="flex gap-2.5 overflow-x-auto no-scrollbar pb-1 -mx-4 px-4">
+            {recProducts.map(({ id, label }) => {
+              const p = PRODUCT[id];
+              if (!p) return null;
+              return (
+                <button key={id} onClick={() => nav('product', { id })} className="btn-press shrink-0 w-[210px] rounded-3xl p-4 text-left border border-moon-400/30"
+                  style={{ background: 'linear-gradient(135deg,#2b3a5e,#222e4c)' }}>
+                  <span className="text-[9.5px] font-black text-night-900 bg-moon-400 rounded-full px-2 py-0.5">「{label}」のあなたに</span>
+                  <div className="flex items-center gap-2.5 mt-2.5">
+                    <span className="text-[30px]">{p.emoji}</span>
+                    <span>
+                      <span className="block text-[12px] font-black text-cream-50 leading-snug">{p.name}</span>
+                      <span className="block text-[12px] font-black text-moon-300 mt-0.5">{yen(p.price)}</span>
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="px-4 mt-3 flex gap-1.5 overflow-x-auto no-scrollbar">
+        {cats.map(c => <Chip key={c} active={cat === c} onClick={() => setCat(c)}>{c === 'all' ? 'すべて' : c}</Chip>)}
+      </div>
+
+      <div className="px-4 mt-3 grid grid-cols-2 gap-2.5">
+        {shown.map(p => (
+          <div key={p.id} className="card p-3 flex flex-col">
+            <button onClick={() => nav('product', { id: p.id })} className="btn-press text-left flex-1">
+              <div className="h-[74px] rounded-2xl bg-night-500/50 flex items-center justify-center text-[36px]">{p.emoji}</div>
+              <p className="text-[9.5px] font-black text-moon-300 mt-2">{p.cat}</p>
+              <p className="text-[12px] font-black text-cream-50 leading-snug mt-0.5">{p.name}</p>
+              <p className="text-[13px] font-black text-cream-50 mt-1">{yen(p.price)}</p>
+            </button>
+            <Btn small kind="ghost" className="mt-2" onClick={() => add(p.id)}>🧺 カートに入れる</Btn>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ProductScreen({ route }) {
+  const { state, update, back, nav } = useApp();
+  const p = PRODUCT[route.params.id];
+  const recs = useMemo(() => buildRecommendations(state), [state]);
+  if (!p) return <div className="p-6"><EmptyState text="商品が見つかりません" /></div>;
+  const reason = recs.find(r => r.product.includes(p.id));
+  const relStretch = STRETCHES.filter(s => s.forIssues.some(t => p.tags.includes(t))).slice(0, 2);
+
+  const add = () => {
+    update(st => {
+      const item = st.cart.find(c => c.productId === p.id);
+      if (item) item.qty++; else st.cart.push({ productId: p.id, qty: 1 });
+    });
+    toast('カートに入れました 🧺');
+  };
+
+  return (
+    <div className="min-h-screen">
+      <BackHeader title="しょうひん" onBack={back}
+        right={<button onClick={() => nav('cart')} className="btn-press text-[18px]">🧺</button>} />
+      <div className="p-4 pb-8">
+        <div className="rounded-3xl bg-night-600 border border-night-400/40 h-[150px] flex items-center justify-center text-[64px]">{p.emoji}</div>
+        <p className="text-[10px] font-black text-moon-300 mt-3">{p.cat}</p>
+        <h1 className="text-[18px] font-black text-cream-50 leading-snug">{p.name}</h1>
+        <p className="text-[20px] font-black text-cream-50 mt-1">{yen(p.price)}<span className="text-[10px] text-night-200 font-bold ml-1">（税込）</span></p>
+        <p className="text-[13px] text-night-50 leading-[1.9] mt-3">{p.desc}</p>
+
+        {reason && (
+          <div className="card-deep p-3.5 mt-4 flex gap-2.5 items-start">
+            <Soupy size={46} animate={false} showZzz={false} />
+            <div>
+              <p className="text-[10px] font-black text-moon-300 mb-0.5">スーピーくんのおすすめ理由</p>
+              <p className="text-[11.5px] text-night-100 leading-relaxed font-bold">「{reason.issue.label}」だったよね。{reason.msg}</p>
+            </div>
+          </div>
+        )}
+
+        {p.ticket && (
+          <div className="card p-3.5 mt-3 text-[11.5px] text-night-100 leading-relaxed">
+            🎫 ご購入後すぐにアプリの回数券残高に追加され、ご来店時のチェックインで1回ずつ使えます。有効期限：購入から{p.ticket.months}ヶ月。
+          </div>
+        )}
+
+        {relStretch.length > 0 && (
+          <div className="mt-4">
+            <p className="text-[11.5px] font-black text-night-100 mb-2">🤝 いっしょにやると効果的</p>
+            <div className="flex flex-wrap gap-1.5">
+              {relStretch.map(s => <Chip key={s.id} onClick={() => nav('stretchPlay', { id: s.id })}>{s.emoji} {s.name}</Chip>)}
+            </div>
+          </div>
+        )}
+
+        <div className="mt-6 flex gap-2">
+          <Btn kind="ghost" onClick={back}>もどる</Btn>
+          <Btn kind="moon" full onClick={add}>🧺 カートに入れる</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CartScreen() {
+  const { state, update, back, nav } = useApp();
+  const [done, setDone] = useState(null);
+  const items = (state.cart || []).map(c => ({ ...c, p: PRODUCT[c.productId] })).filter(x => x.p);
+  const total = items.reduce((a, x) => a + x.p.price * x.qty, 0);
+
+  const setQty = (id, d) => update(st => {
+    const item = st.cart.find(c => c.productId === id);
+    if (!item) return;
+    item.qty += d;
+    if (item.qty <= 0) st.cart = st.cart.filter(c => c.productId !== id);
+  });
+
+  const checkout = () => {
+    const order = { id: uid(), date: todayStr(), items: items.map(x => ({ id: x.productId, qty: x.qty })), total };
+    update(st => {
+      st.orders.push(order);
+      // 回数券商品は残高に追加
+      items.forEach(x => {
+        if (x.p.ticket) {
+          for (let i = 0; i < x.qty; i++) {
+            st.tickets.push({
+              id: uid(), name: x.p.name, total: x.p.ticket.count, used: 0,
+              purchasedAt: todayStr(), expiresAt: addDays(todayStr(), Math.round(x.p.ticket.months * 30.4)), history: [],
+            });
+          }
+        }
+      });
+      st.cart = [];
+      gainXp(st, 20, 'おかいもの');
+    });
+    setDone(order);
+  };
+
+  return (
+    <div className="min-h-screen">
+      <BackHeader title="🧺 カート" onBack={back} />
+      <div className="p-4 pb-8">
+        {items.length === 0 && !done && <EmptyState emoji="🧺" text="カートはからっぽです" sub="ショップでスーピーくんのおすすめを見てみよう" />}
+        <div className="flex flex-col gap-2">
+          {items.map(x => (
+            <div key={x.productId} className="card p-3 flex items-center gap-3">
+              <span className="w-11 h-11 rounded-xl bg-night-500 flex items-center justify-center text-[20px]">{x.p.emoji}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-[12px] font-black text-cream-50 truncate">{x.p.name}</p>
+                <p className="text-[12px] font-black text-moon-300">{yen(x.p.price)}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setQty(x.productId, -1)} className="btn-press w-7 h-7 rounded-full bg-night-500 font-black">−</button>
+                <span className="w-5 text-center font-black text-[14px]">{x.qty}</span>
+                <button onClick={() => setQty(x.productId, +1)} className="btn-press w-7 h-7 rounded-full bg-night-500 font-black">＋</button>
+              </div>
+            </div>
+          ))}
+        </div>
+        {items.length > 0 && (
+          <div className="mt-4">
+            <div className="card p-4 flex items-center justify-between">
+              <span className="text-[12.5px] font-bold text-night-100">ごうけい（税込）</span>
+              <span className="text-[20px] font-black text-cream-50">{yen(total)}</span>
+            </div>
+            <p className="text-[10px] text-night-300 mt-2 text-center">※デモ決済です。実際の請求はありません。お受け取りはサロンにて。</p>
+            <div className="mt-3"><Btn kind="moon" full onClick={checkout}>ちゅうもんを確定する</Btn></div>
+          </div>
+        )}
+      </div>
+
+      <Modal open={!!done} onClose={() => { setDone(null); back(); }}>
+        <div className="text-center py-2">
+          <Soupy size={140} mood="excited" showZzz={false} className="mx-auto" />
+          <h3 className="text-[17px] font-black text-cream-50 mt-2">ご注文ありがとうございます！</h3>
+          <p className="text-[11.5px] text-night-100 mt-2 leading-relaxed">お受け取りは次回ご来店時にどうぞ。<br />回数券はすぐに残高へ反映されました。</p>
+          <p className="text-[12.5px] font-black text-moon-300 mt-2">+20 XP</p>
+          <div className="mt-4"><Btn kind="moon" full onClick={() => { setDone(null); back(); }}>OK</Btn></div>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+/* ============================================================
+   SECTION 14: 会員証・回数券・来店チェックイン
+   ============================================================ */
+function CheckinModal({ open, onClose }) {
+  const { state, update, nav } = useApp();
+  const [step, setStep] = useState('confirm'); // confirm | ticket | done
+  const tickets = (state.tickets || []).filter(tk => tk.total - tk.used > 0 && tk.expiresAt >= todayStr());
+  const [tkId, setTkId] = useState(null);
+
+  useEffect(() => { if (open) { setStep('confirm'); setTkId(tickets[0]?.id || 'cash'); } }, [open]);
+
+  const doCheckin = () => {
+    update(st => {
+      const useTk = st.tickets.find(x => x.id === tkId);
+      if (useTk) { useTk.used++; useTk.history.push({ date: todayStr(), note: '睡眠整体' }); }
+      st.visits.push({ id: uid(), date: todayStr(), menu: '睡眠整体', note: useTk ? `回数券使用（のこり${useTk.total - useTk.used}回）` : '都度払い' });
+      gainXp(st, 50, 'ご来店');
+      if (!st.visitFlow) st.visitFlow = { step: 1, startedAt: todayStr(), beforeId: null, afterId: null, prescribed: [], recommended: [] };
+      else st.visitFlow.step = Math.max(st.visitFlow.step, 1);
+    });
+    setStep('done');
+  };
+
+  return (
+    <Modal open={open} onClose={onClose}>
+      {step === 'confirm' && (
+        <div>
+          <h3 className="text-[16px] font-black text-cream-50 mb-1">🏥 ご来店チェックイン</h3>
+          <p className="text-[11.5px] text-night-200 mb-4">受付でスタッフと一緒にお進みください。</p>
+          <div className="card-deep p-3.5 mb-3">
+            <p className="text-[11px] font-bold text-night-100 mb-2">お支払い方法をえらぶ</p>
+            <div className="flex flex-col gap-1.5">
+              {tickets.map(tk => (
+                <button key={tk.id} onClick={() => setTkId(tk.id)}
+                  className={`btn-press text-left px-3 py-2.5 rounded-xl border text-[12px] font-bold ${tkId === tk.id ? 'border-moon-400 bg-moon-400/10 text-cream-50' : 'border-night-400/40 bg-night-600 text-night-100'}`}>
+                  🎫 {tk.name} <span className="text-moon-300">のこり{tk.total - tk.used}回</span>
+                  <span className="block text-[9.5px] text-night-300 mt-0.5">有効期限 {fmtJP(tk.expiresAt)}</span>
+                </button>
+              ))}
+              <button onClick={() => setTkId('cash')}
+                className={`btn-press text-left px-3 py-2.5 rounded-xl border text-[12px] font-bold ${tkId === 'cash' ? 'border-moon-400 bg-moon-400/10 text-cream-50' : 'border-night-400/40 bg-night-600 text-night-100'}`}>
+                💴 都度払い／その他
+              </button>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Btn kind="ghost" onClick={onClose}>やめる</Btn>
+            <Btn kind="moon" full onClick={doCheckin}>チェックインする（+50 XP）</Btn>
+          </div>
+        </div>
+      )}
+      {step === 'done' && (
+        <div className="text-center py-2">
+          <Soupy size={140} mood="excited" showZzz={false} className="mx-auto" />
+          <h3 className="text-[17px] font-black text-cream-50 mt-1">ようこそ、SLEEPYへ！</h3>
+          <p className="text-[11.5px] text-night-100 mt-1.5">+50 XP！本日の流れをガイドでご案内します。</p>
+          <div className="mt-4 flex gap-2">
+            <Btn kind="ghost" onClick={onClose}>とじる</Btn>
+            <Btn kind="moon" full onClick={() => { onClose(); nav('visit'); }}>来店ガイドをひらく</Btn>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+function MemberScreen() {
+  const { state, back, nav } = useApp();
+  const [checkin, setCheckin] = useState(false);
+  const [openTk, setOpenTk] = useState(null);
+  const { lv } = levelFromXp(state.soupy.xp);
+  const remaining = ticketRemaining(state);
+
+  return (
+    <div className="min-h-screen">
+      <BackHeader title="会員証・回数券" onBack={back} />
+      <div className="p-4 pb-8">
+        {/* 会員証カード */}
+        <NightSky dense className="rounded-3xl border border-moon-400/25 shadow-xl shadow-black/30">
+          <div className="p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[9.5px] tracking-[.2em] text-moon-300 font-black">MEMBERS CARD</p>
+                <p className="text-[17px] font-black text-cream-50 mt-0.5">睡眠整体サロン SLEEPY</p>
+              </div>
+              <img src="assets/logo.jpg" alt="" className="w-11 h-11 rounded-xl object-cover border border-night-400/40"
+                onError={e => { e.currentTarget.outerHTML = '<span style="font-size:30px">🐑</span>'; }} />
+            </div>
+            <div className="flex items-end justify-between mt-6">
+              <div>
+                <p className="text-[10px] text-night-200 font-bold">お名前</p>
+                <p className="text-[16px] font-black text-cream-50">{state.profile.name || 'ゲスト'} さま</p>
+                <p className="text-[10px] text-night-200 font-bold mt-2">会員番号 <span className="text-cream-100">{state.profile.memberNo}</span></p>
+              </div>
+              <div className="text-right">
+                <Soupy size={64} animate={false} />
+                <p className="text-[9.5px] font-black text-moon-300">Lv.{lv} {stageTitle(lv)}</p>
+              </div>
+            </div>
+            {/* バーコード風 */}
+            <div className="mt-4 bg-cream-50 rounded-xl p-2.5 flex items-end justify-center gap-[2px] h-[46px]">
+              {state.profile.memberNo.split('').flatMap((ch, i) =>
+                [0, 1, 2].map(j => <span key={i + '-' + j} style={{ width: 2 + ((ch.charCodeAt(0) + j) % 3), height: '100%', background: '#0d1424', opacity: ((ch.charCodeAt(0) + j) % 4) ? 1 : 0 }} />)
+              )}
+            </div>
+            <p className="text-center text-[9px] text-night-300 mt-1.5">ご来店時に受付でご提示ください</p>
+          </div>
+        </NightSky>
+
+        <div className="mt-4"><Btn kind="moon" full onClick={() => setCheckin(true)}>🏥 ご来店チェックイン</Btn></div>
+
+        {/* 回数券 */}
+        <div className="mt-5">
+          <SectionTitle icon="🎫" title="回数券ざんだか" sub={remaining > 0 ? `ぜんぶで のこり${remaining}回` : 'ご購入はショップから'}
+            right={<button onClick={() => nav('product', { id: 't_10' })} className="text-[11px] font-bold text-moon-300">購入する →</button>} />
+          {(state.tickets || []).length === 0 && (
+            <div className="card"><EmptyState emoji="🎫" text="回数券はまだありません" sub="ショップからご購入いただけます" /></div>
+          )}
+          <div className="flex flex-col gap-2.5">
+            {(state.tickets || []).map(tk => {
+              const left = tk.total - tk.used;
+              const expired = tk.expiresAt < todayStr();
+              return (
+                <div key={tk.id} className={`card p-4 ${expired || left === 0 ? 'opacity-55' : ''}`}>
+                  <div className="flex items-center gap-3">
+                    <div className="w-[64px] shrink-0 text-center">
+                      <p className="text-[26px] font-black text-cream-50 leading-none">{left}<span className="text-[10px] text-night-200">/{tk.total}</span></p>
+                      <p className="text-[9px] text-night-300 mt-0.5">のこり回数</p>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[12.5px] font-black text-cream-50 truncate">🎫 {tk.name}</p>
+                      <div className="mt-1.5"><ProgressBar pct={left / tk.total * 100} color={left > 0 && !expired ? C.moon : C.night300} h={7} /></div>
+                      <p className="text-[9.5px] text-night-300 mt-1">有効期限 {fmtJP(tk.expiresAt)}{expired && '（期限切れ）'}</p>
+                    </div>
+                  </div>
+                  {tk.history.length > 0 && (
+                    <button onClick={() => setOpenTk(openTk === tk.id ? null : tk.id)} className="text-[10.5px] font-bold text-moon-300 mt-2">
+                      利用履歴 {openTk === tk.id ? '▲' : '▼'}
+                    </button>
+                  )}
+                  {openTk === tk.id && (
+                    <div className="anim-slide-up mt-1.5 border-t border-night-500/50 pt-1.5">
+                      {tk.history.map((h, i) => (
+                        <p key={i} className="text-[10.5px] text-night-200 py-0.5">{fmtJP(h.date)} — {h.note}</p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 来店履歴 */}
+        <div className="mt-5">
+          <SectionTitle icon="🗓️" title="ご来店のきろく" sub={`これまで ${state.visits.length}回`} />
+          {(state.visits || []).length === 0 && <div className="card"><EmptyState emoji="🏥" text="ご来店の記録はまだありません" /></div>}
+          <div className="flex flex-col gap-1.5">
+            {[...(state.visits || [])].reverse().slice(0, 8).map(v => (
+              <div key={v.id} className="card px-3.5 py-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-[13px]">🏥</span>
+                  <span className="text-[11.5px] font-black text-cream-50">{fmtJP(v.date)}</span>
+                  <span className="text-[10.5px] text-night-200 ml-auto">{v.menu}</span>
+                </div>
+                {v.note && <p className="text-[10.5px] text-night-200 mt-1 pl-6">{v.note}</p>}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <CheckinModal open={checkin} onClose={() => setCheckin(false)} />
+    </div>
+  );
+}
+
+/* ============================================================
+   SECTION 15: 姿勢分析（MediaPipe Pose）
+   カメラ / 写真 / デモ の3入力 → 骨格検出 → スコア化 → 保存
+   施術前(before)/施術後(after)を保存してBefore/After比較。
+   ============================================================ */
+const MP_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/';
+const LM = { nose:0, lEye:2, rEye:5, lEar:7, rEar:8, lSh:11, rSh:12, lHip:23, rHip:24, lKnee:25, rKnee:26, lAnkle:27, rAnkle:28 };
+
+async function ensurePose() {
+  if (window.Pose) return;
+  await loadScriptOnce(MP_CDN + 'pose.js');
+}
+
+let __pose = null, __poseBusy = Promise.resolve();
+function detectPose(canvas) {
+  // 直列化して1枚ずつ解析
+  const run = async () => {
+    await ensurePose();
+    if (!__pose) {
+      __pose = new window.Pose({ locateFile: f => MP_CDN + f });
+      __pose.setOptions({ modelComplexity: 1, smoothLandmarks: false, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+    }
+    return new Promise((resolve, reject) => {
+      __pose.onResults(r => resolve(r));
+      __pose.send({ image: canvas }).catch(reject);
+    });
+  };
+  __poseBusy = __poseBusy.then(run, run);
+  return __poseBusy;
+}
+
+const deg = (rad) => rad * 180 / Math.PI;
+
+// 正面: 頭の傾き / 肩の高さ差 / 骨盤の傾き / 重心の左右
+function frontMetrics(px) {
+  const tilt = (a, b) => deg(Math.atan2(px[b].y - px[a].y, Math.abs(px[b].x - px[a].x) || 1));
+  const headTilt = tilt(LM.lEar, LM.rEar);
+  const shoulderTilt = tilt(LM.lSh, LM.rSh);
+  const pelvisTilt = tilt(LM.lHip, LM.rHip);
+  const shW = Math.abs(px[LM.rSh].x - px[LM.lSh].x) || 1;
+  const midSh = (px[LM.lSh].x + px[LM.rSh].x) / 2;
+  const midAn = (px[LM.lAnkle].x + px[LM.rAnkle].x) / 2;
+  const centerShift = (midSh - midAn) / shW * 100;
+  return { headTilt, shoulderTilt, pelvisTilt, centerShift };
+}
+function frontScore(m) {
+  const s1 = Math.max(0, 25 - Math.abs(m.headTilt) * 3.2);
+  const s2 = Math.max(0, 25 - Math.abs(m.shoulderTilt) * 4.5);
+  const s3 = Math.max(0, 25 - Math.abs(m.pelvisTilt) * 4.5);
+  const s4 = Math.max(0, 25 - Math.abs(m.centerShift) * 1.1);
+  return Math.round(s1 + s2 + s3 + s4);
+}
+
+// 側面: 頭部前方角(FHA) / 体幹の前後傾 / 下肢ライン
+function sideMetrics(px, side) {
+  const ear = side === 'l' ? px[LM.lEar] : px[LM.rEar];
+  const sh = side === 'l' ? px[LM.lSh] : px[LM.rSh];
+  const hip = side === 'l' ? px[LM.lHip] : px[LM.rHip];
+  const ankle = side === 'l' ? px[LM.lAnkle] : px[LM.rAnkle];
+  const fha = deg(Math.atan2(Math.abs(ear.x - sh.x), Math.abs(sh.y - ear.y) || 1));
+  const trunkLean = deg(Math.atan2(Math.abs(sh.x - hip.x), Math.abs(hip.y - sh.y) || 1));
+  const kneeLean = deg(Math.atan2(Math.abs(hip.x - ankle.x), Math.abs(ankle.y - hip.y) || 1));
+  return { fha, trunkLean, kneeLean };
+}
+function sideScore(m) {
+  const s1 = Math.max(0, 40 - Math.max(0, m.fha - 5) * 2.4);
+  const s2 = Math.max(0, 30 - Math.max(0, m.trunkLean - 2) * 3.2);
+  const s3 = Math.max(0, 30 - Math.max(0, m.kneeLean - 2) * 3.2);
+  return Math.round(s1 + s2 + s3);
+}
+
+function metricRows(mode, m) {
+  if (mode === 'front') return [
+    { label: '頭のかたむき', value: `${Math.abs(m.headTilt).toFixed(1)}°`, ok: Math.abs(m.headTilt) < 2.5, warn: Math.abs(m.headTilt) < 5,
+      note: '首の左右バランス。かたむきは首すじの緊張のサイン。' },
+    { label: '肩の高さの差', value: `${Math.abs(m.shoulderTilt).toFixed(1)}°`, ok: Math.abs(m.shoulderTilt) < 2.5, warn: Math.abs(m.shoulderTilt) < 5,
+      note: '肩の左右差は肩甲骨まわりのこわばりと関係します。' },
+    { label: '骨盤のかたむき', value: `${Math.abs(m.pelvisTilt).toFixed(1)}°`, ok: Math.abs(m.pelvisTilt) < 2.5, warn: Math.abs(m.pelvisTilt) < 5,
+      note: '骨盤の傾きは腰の負担・寝返りのしやすさに影響。' },
+    { label: '重心の左右ズレ', value: `${Math.abs(m.centerShift).toFixed(0)}%`, ok: Math.abs(m.centerShift) < 8, warn: Math.abs(m.centerShift) < 16,
+      note: '立ち姿勢の安定感。ズレが大きいと片側に負担が集中。' },
+  ];
+  return [
+    { label: '頭部前方角（スマホ首）', value: `${m.fha.toFixed(1)}°`, ok: m.fha < 8, warn: m.fha < 15,
+      note: '頭が前に出るほど首の負担が増え、呼吸が浅くなります。' },
+    { label: '体幹の前後傾', value: `${m.trunkLean.toFixed(1)}°`, ok: m.trunkLean < 4, warn: m.trunkLean < 8,
+      note: '猫背・反り腰の目安。胸がひらくと呼吸がラクに。' },
+    { label: 'からだの軸ライン', value: `${m.kneeLean.toFixed(1)}°`, ok: m.kneeLean < 4, warn: m.kneeLean < 8,
+      note: '耳〜肩〜骨盤〜くるぶしが一直線に近いほど理想的。' },
+  ];
+}
+
+function sleepConnection(mode, m, score) {
+  const msgs = [];
+  if (mode === 'side') {
+    if (m.fha >= 15) msgs.push('頭がかなり前に出ています。首の緊張が交感神経を刺激し、気道もせまくなりがち。寝つき・いびき・眠りの浅さにつながる姿勢です。');
+    else if (m.fha >= 8) msgs.push('やや頭が前に出ています。首まわりの緊張は「切り替えベタな自律神経」の原因に。首ケアとまくらの見直しがおすすめ。');
+    else msgs.push('首のラインがきれいです。気道と自律神経の通り道にやさしい姿勢で、深い呼吸→ぐっすりの好循環がつくれます。');
+    if (m.trunkLean >= 8) msgs.push('体幹の傾きが大きめ。胸郭が圧迫され呼吸が浅くなりやすい状態です。');
+  } else {
+    if (Math.abs(m.shoulderTilt) >= 5) msgs.push('肩の高さに差があります。片側の筋緊張は睡眠中の寝返りをじゃまして、眠りを浅くすることがあります。');
+    else if (Math.abs(m.shoulderTilt) >= 2.5) msgs.push('肩にわずかな左右差。肩甲骨ストレッチでゆるめておきましょう。');
+    if (Math.abs(m.pelvisTilt) >= 2.5) msgs.push('骨盤にかたむきがあります。腰の緊張は中途覚醒の一因になります。');
+    if (!msgs.length) msgs.push('左右バランスがとても良い状態。からだが休まりやすい姿勢です。');
+  }
+  if (score < 70) msgs.push('施術で整えると、呼吸と自律神経のスイッチが入りやすいからだになります。');
+  return msgs;
+}
+
+// デモ用ランドマーク（33点のうち必要点のみ配置）
+function demoLandmarks(mode, phase) {
+  const l = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, visibility: 0 }));
+  const set = (i, x, y) => { l[i] = { x, y, visibility: 1 }; };
+  if (mode === 'front') {
+    const t = phase === 'after' ? 0.006 : 0.024; // 傾き量
+    set(LM.nose, 0.50, 0.13);
+    set(LM.lEar, 0.445, 0.15 + t); set(LM.rEar, 0.555, 0.15 - t);
+    set(LM.lSh, 0.36, 0.30 + t * 2.2); set(LM.rSh, 0.64, 0.30 - t * 2.2);
+    set(LM.lHip, 0.425, 0.55 + t * 1.4); set(LM.rHip, 0.575, 0.55 - t * 1.4);
+    set(LM.lKnee, 0.435, 0.72); set(LM.rKnee, 0.565, 0.72);
+    set(LM.lAnkle, 0.445 + (phase === 'after' ? 0 : 0.02), 0.885); set(LM.rAnkle, 0.565 + (phase === 'after' ? 0 : 0.02), 0.885);
+  } else {
+    const fw = phase === 'after' ? 0.022 : 0.075; // 頭の前方変位
+    set(LM.nose, 0.56 + fw, 0.125);
+    set(LM.rEar, 0.52 + fw, 0.145); set(LM.lEar, 0.52 + fw, 0.148);
+    set(LM.rSh, 0.52, 0.30); set(LM.lSh, 0.52, 0.303);
+    set(LM.rHip, 0.50, 0.55); set(LM.lHip, 0.50, 0.553);
+    set(LM.rKnee, 0.515, 0.72); set(LM.lKnee, 0.515, 0.723);
+    set(LM.rAnkle, 0.505, 0.885); set(LM.lAnkle, 0.505, 0.888);
+  }
+  return l;
+}
+
+function drawDemoBody(ctx, w, h) {
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, '#1a2440'); g.addColorStop(1, '#131c31');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = 'rgba(91,107,148,.35)';
+  ctx.beginPath(); ctx.arc(w * 0.52, h * 0.15, w * 0.09, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(w * 0.51, h * 0.45, w * 0.15, h * 0.24, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(w * 0.51, h * 0.78, w * 0.10, h * 0.16, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(199,206,222,.5)'; ctx.font = `bold ${Math.round(w * 0.045)}px sans-serif`;
+  ctx.textAlign = 'center'; ctx.fillText('デモ画像', w / 2, h * 0.97);
+}
+
+// 骨格オーバーレイ描画
+function drawOverlay(ctx, w, h, lms, mode) {
+  const P = i => ({ x: lms[i].x * w, y: lms[i].y * h, v: lms[i].visibility });
+  const seg = (a, b) => {
+    const pa = P(a), pb = P(b);
+    if (pa.v < 0.4 || pb.v < 0.4) return;
+    ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
+  };
+  // ガイド（正中線）
+  ctx.save();
+  ctx.strokeStyle = 'rgba(250,243,227,.4)'; ctx.setLineDash([6, 6]); ctx.lineWidth = 1.5;
+  const gx = mode === 'side' ? (P(LM.rAnkle).v > 0.4 ? P(LM.rAnkle).x : w / 2) : w / 2;
+  ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, h); ctx.stroke();
+  ctx.restore();
+  // 骨格
+  ctx.strokeStyle = 'rgba(250,243,227,.9)'; ctx.lineWidth = Math.max(2, w * 0.008); ctx.lineCap = 'round';
+  seg(LM.lEar, LM.rEar); seg(LM.lSh, LM.rSh); seg(LM.lHip, LM.rHip);
+  seg(LM.lSh, LM.lHip); seg(LM.rSh, LM.rHip);
+  seg(LM.lHip, LM.lKnee); seg(LM.lKnee, LM.lAnkle);
+  seg(LM.rHip, LM.rKnee); seg(LM.rKnee, LM.rAnkle);
+  if (mode === 'side') { seg(LM.rEar, LM.rSh); seg(LM.lEar, LM.lSh); }
+  // ポイント
+  [LM.lEar, LM.rEar, LM.lSh, LM.rSh, LM.lHip, LM.rHip, LM.lKnee, LM.rKnee, LM.lAnkle, LM.rAnkle].forEach(i => {
+    const p = P(i); if (p.v < 0.4) return;
+    ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(3.5, w * 0.012), 0, Math.PI * 2);
+    ctx.fillStyle = '#f6d97e'; ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = '#131c31'; ctx.stroke();
+  });
+}
+
+function PostureScreen({ route }) {
+  const { state, update, back, nav } = useApp();
+  const fromVisit = route.params?.from === 'visit';
+  const [mode, setMode] = useState(route.params?.mode || 'side');
+  const [phase, setPhase] = useState(route.params?.phase || 'normal'); // before | after | normal
+  const [view, setView] = useState('menu'); // menu | camera | busy | result
+  const [result, setResult] = useState(null); // {canvasUrl, metrics, score, mode}
+  const [camErr, setCamErr] = useState(null);
+  const [countdown, setCountdown] = useState(0);
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const fileRef = useRef(null);
+
+  const stopCam = () => { if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; } };
+  useEffect(() => () => stopCam(), []);
+
+  const startCamera = async () => {
+    setCamErr(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 720 }, height: { ideal: 960 } }, audio: false });
+      streamRef.current = stream;
+      setView('camera');
+      setTimeout(() => { if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play().catch(() => {}); } }, 50);
+    } catch (e) {
+      console.warn(e);
+      setCamErr('カメラを起動できませんでした。「写真をえらぶ」からもお試しいただけます。');
+    }
+  };
+
+  const finishAnalyze = (canvas, lms) => {
+    const w = canvas.width, h = canvas.height;
+    const px = lms.map(p => ({ x: p.x * w, y: p.y * h, visibility: p.visibility }));
+    let metrics, score;
+    if (mode === 'front') { metrics = frontMetrics(px); score = frontScore(metrics); }
+    else {
+      const vis = i => lms[i].visibility || 0;
+      const side = (vis(LM.lEar) + vis(LM.lSh) + vis(LM.lHip)) > (vis(LM.rEar) + vis(LM.rSh) + vis(LM.rHip)) ? 'l' : 'r';
+      metrics = sideMetrics(px, side); score = sideScore(metrics);
+    }
+    const ctx = canvas.getContext('2d');
+    drawOverlay(ctx, w, h, lms, mode);
+    // 保存用サムネイル
+    const tw = 300, th = Math.round(h / w * 300);
+    const tc = document.createElement('canvas'); tc.width = tw; tc.height = th;
+    tc.getContext('2d').drawImage(canvas, 0, 0, tw, th);
+    setResult({ url: canvas.toDataURL('image/jpeg', 0.82), thumb: tc.toDataURL('image/jpeg', 0.55), metrics, score, mode });
+    setView('result');
+  };
+
+  const analyzeCanvas = async (canvas, demo) => {
+    setView('busy');
+    try {
+      if (demo) { finishAnalyze(canvas, demoLandmarks(mode, phase === 'after' ? 'after' : 'before')); return; }
+      const res = await detectPose(canvas);
+      if (!res || !res.poseLandmarks) { toast('からだを見つけられませんでした。全身が写るように撮ってみてね', 'err'); setView('menu'); return; }
+      finishAnalyze(canvas, res.poseLandmarks);
+    } catch (e) {
+      console.warn(e);
+      toast('分析エンジンの読み込みに失敗しました（ネット接続をご確認ください）。デモでお試しいただけます', 'err');
+      setView('menu');
+    }
+  };
+
+  const capture = () => {
+    setCountdown(3);
+    const iv = setInterval(() => {
+      setCountdown(c => {
+        if (c > 1) return c - 1;
+        clearInterval(iv);
+        const v = videoRef.current;
+        if (v && v.videoWidth) {
+          const scale = Math.min(1, 720 / v.videoHeight);
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.round(v.videoWidth * scale); canvas.height = Math.round(v.videoHeight * scale);
+          canvas.getContext('2d').drawImage(v, 0, 0, canvas.width, canvas.height);
+          stopCam();
+          analyzeCanvas(canvas, false);
+        }
+        return 0;
+      });
+    }, 1000);
+  };
+
+  const onFile = (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, 900 / img.height);
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale); canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(img.src);
+      analyzeCanvas(canvas, false);
+    };
+    img.src = URL.createObjectURL(f);
+    e.target.value = '';
+  };
+
+  const runDemo = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 360; canvas.height = 480;
+    drawDemoBody(canvas.getContext('2d'), 360, 480);
+    analyzeCanvas(canvas, true);
+  };
+
+  const saveResult = () => {
+    const rec = {
+      id: uid(), date: todayStr(), mode: result.mode, phase,
+      score: result.score, metrics: result.metrics, img: result.thumb,
+    };
+    update(st => {
+      st.posture.push(rec);
+      // 画像は直近12件だけ保持
+      const withImg = st.posture.filter(p => p.img);
+      if (withImg.length > 12) withImg.slice(0, withImg.length - 12).forEach(p => { p.img = null; });
+      if (st.visitFlow) {
+        if (phase === 'before') { st.visitFlow.beforeId = rec.id; st.visitFlow.step = Math.max(st.visitFlow.step, 3); }
+        if (phase === 'after') { st.visitFlow.afterId = rec.id; st.visitFlow.step = Math.max(st.visitFlow.step, 5); }
+      }
+    });
+    toast('分析結果をほぞんしました 📊');
+    if (fromVisit) back();
+    else { setView('menu'); setResult(null); }
+  };
+
+  const history = [...(state.posture || [])].reverse();
+
+  return (
+    <div className="min-h-screen">
+      <BackHeader title="📸 姿勢分析" onBack={() => { stopCam(); back(); }} />
+
+      {view === 'menu' && (
+        <div className="p-4 pb-8">
+          <div className="card-deep p-3.5 flex gap-2.5 items-center">
+            <Soupy size={46} animate={false} showZzz={false} />
+            <p className="text-[11.5px] text-night-100 leading-relaxed font-bold">姿勢は呼吸と自律神経の入り口。施術の前後でとると、変化がひと目でわかるよ！</p>
+          </div>
+
+          <p className="text-[12px] font-black text-night-100 mt-4 mb-1.5">① 分析する向き</p>
+          <div className="grid grid-cols-2 gap-2">
+            {[{ id: 'side', icon: '🚶', t: '側面（よこ向き)', d: 'スマホ首・猫背チェック' }, { id: 'front', icon: '🧍', t: '正面', d: '肩・骨盤の左右差チェック' }].map(o => (
+              <button key={o.id} onClick={() => setMode(o.id)}
+                className={`btn-press card p-3.5 text-left ${mode === o.id ? 'ring-2 ring-moon-400' : ''}`}>
+                <span className="text-[22px]">{o.icon}</span>
+                <span className="block text-[12.5px] font-black text-cream-50 mt-1">{o.t}</span>
+                <span className="block text-[10px] text-night-200 mt-0.5">{o.d}</span>
+              </button>
+            ))}
+          </div>
+
+          <p className="text-[12px] font-black text-night-100 mt-4 mb-1.5">② タイミング</p>
+          <div className="flex gap-1.5">
+            {[{ id: 'before', t: '施術前' }, { id: 'after', t: '施術後' }, { id: 'normal', t: 'ふだん' }].map(o => (
+              <Chip key={o.id} active={phase === o.id} onClick={() => setPhase(o.id)}>{o.t}</Chip>
+            ))}
+          </div>
+
+          <p className="text-[12px] font-black text-night-100 mt-4 mb-1.5">③ さつえい方法</p>
+          <div className="flex flex-col gap-2">
+            <Btn kind="moon" full onClick={startCamera}>📷 カメラでさつえい</Btn>
+            <Btn kind="ghost" full onClick={() => fileRef.current && fileRef.current.click()}>🖼️ 写真をえらぶ</Btn>
+            <Btn kind="outline" full onClick={runDemo}>✨ デモでためす（カメラ不要）</Btn>
+            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFile} />
+          </div>
+          {camErr && <p className="text-[11px] text-[#f0968c] font-bold mt-2">{camErr}</p>}
+          <p className="text-[10px] text-night-300 mt-2 leading-relaxed">📌 撮影のコツ：全身が入るように2〜3m離れて。側面はからだの真横から。写真はこの端末にだけ保存されます。</p>
+
+          {history.length >= 2 && (
+            <div className="mt-5">
+              <Btn kind="primary" full onClick={() => nav('postureCompare')}>🔄 Before / After をくらべる</Btn>
+            </div>
+          )}
+
+          {history.length > 0 && (
+            <div className="mt-5">
+              <SectionTitle icon="🗂️" title="これまでの分析" />
+              <div className="flex flex-col gap-1.5">
+                {history.slice(0, 6).map(p => (
+                  <div key={p.id} className="card px-3.5 py-2.5 flex items-center gap-3">
+                    {p.img ? <img src={p.img} alt="" className="w-9 h-12 rounded-lg object-cover border border-night-400/40" /> : <span className="w-9 h-12 rounded-lg bg-night-500 flex items-center justify-center">🧍</span>}
+                    <div className="flex-1">
+                      <p className="text-[11.5px] font-black text-cream-50">
+                        {p.mode === 'front' ? '正面' : '側面'}
+                        <span className={`ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full font-black ${p.phase === 'before' ? 'bg-csymp/20 text-[#f0968c]' : p.phase === 'after' ? 'bg-cpara/20 text-[#4cc2ae]' : 'bg-night-500 text-night-100'}`}>
+                          {p.phase === 'before' ? '施術前' : p.phase === 'after' ? '施術後' : 'ふだん'}
+                        </span>
+                        {p.demo && <span className="ml-1 text-[9px] text-night-300">デモ</span>}
+                      </p>
+                      <p className="text-[10px] text-night-300">{fmtJP(p.date)}</p>
+                    </div>
+                    <span className="text-[18px] font-black" style={{ color: scoreLabel(p.score).color }}>{p.score}<span className="text-[9px]">点</span></span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {view === 'camera' && (
+        <div className="p-4">
+          <div className="relative rounded-3xl overflow-hidden border border-night-400/50 bg-black">
+            <video ref={videoRef} playsInline muted className="w-full max-h-[62vh] object-cover" style={{ transform: 'scaleX(-1)' }} />
+            {/* ガイド枠 */}
+            <div className="absolute inset-0 pointer-events-none">
+              <div className="absolute left-1/2 top-0 bottom-0 w-[2px] -translate-x-1/2 opacity-50" style={{ background: 'repeating-linear-gradient(#faf3e3 0 8px, transparent 8px 16px)' }} />
+              <div className="absolute left-[12%] right-[12%] top-[6%] bottom-[4%] border-2 border-dashed border-cream-100/50 rounded-[40px]" />
+              <p className="absolute bottom-2 left-0 right-0 text-center text-[11px] font-black text-cream-50" style={{ textShadow: '0 1px 6px #000' }}>
+                {mode === 'side' ? 'まよこ向きで、わくの中に全身を' : '正面向きで、わくの中に全身を'}
+              </p>
+            </div>
+            {countdown > 0 && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                <span key={countdown} className="text-[86px] font-black text-cream-50 anim-pop">{countdown}</span>
+              </div>
+            )}
+          </div>
+          <div className="mt-3 flex gap-2">
+            <Btn kind="ghost" onClick={() => { stopCam(); setView('menu'); }}>もどる</Btn>
+            <Btn kind="moon" full onClick={capture} disabled={countdown > 0}>📸 3秒タイマーでさつえい</Btn>
+          </div>
+        </div>
+      )}
+
+      {view === 'busy' && (
+        <div className="p-8 text-center">
+          <Soupy size={130} mood="sleep" className="mx-auto" />
+          <p className="text-[13px] font-black text-cream-50 mt-3">ほねぐみを分析中…</p>
+          <p className="text-[11px] text-night-200 mt-1">はじめてのときはモデルの読み込みに少し時間がかかります</p>
+          <div className="mt-4 mx-auto w-8 h-8 rounded-full border-4 border-night-500 border-t-moon-400" style={{ animation: 'spin-slow 1s linear infinite' }} />
+        </div>
+      )}
+
+      {view === 'result' && result && (
+        <div className="p-4 pb-8">
+          <div className="flex gap-3">
+            <img src={result.url} alt="分析画像" className="w-[46%] rounded-2xl border border-night-400/50 object-cover" />
+            <div className="flex-1 flex flex-col items-center justify-center">
+              <ScoreRing score={result.score} size={120} sub="姿勢スコア" />
+              <span className={`mt-2 text-[10px] px-2 py-1 rounded-full font-black ${phase === 'before' ? 'bg-csymp/20 text-[#f0968c]' : phase === 'after' ? 'bg-cpara/20 text-[#4cc2ae]' : 'bg-night-500 text-night-100'}`}>
+                {result.mode === 'front' ? '正面' : '側面'}・{phase === 'before' ? '施術前' : phase === 'after' ? '施術後' : 'ふだん'}
+              </span>
+            </div>
+          </div>
+
+          <div className="card p-4 mt-3">
+            <p className="text-[11px] font-black text-night-200 mb-2">こまかい数値</p>
+            {metricRows(result.mode, result.metrics).map((r, i) => (
+              <div key={i} className="py-2 border-b border-night-500/40 last:border-0">
+                <div className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full shrink-0`} style={{ background: r.ok ? C.good : r.warn ? C.warning : C.serious }} />
+                  <span className="flex-1 text-[12px] font-bold text-cream-50">{r.label}</span>
+                  <span className="text-[13px] font-black" style={{ color: r.ok ? '#4cc2ae' : r.warn ? C.warning : '#f0968c' }}>{r.value}</span>
+                  <span className="text-[9.5px] font-black text-night-300">{r.ok ? 'よい' : r.warn ? 'まずまず' : '要ケア'}</span>
+                </div>
+                <p className="text-[10.5px] text-night-200 mt-1 pl-4">{r.note}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="card-deep p-4 mt-3">
+            <p className="text-[11px] font-black text-moon-300 mb-1.5">🌙 ねむりとのつながり</p>
+            {sleepConnection(result.mode, result.metrics, result.score).map((t, i) => (
+              <p key={i} className="text-[12px] text-night-100 leading-relaxed mb-1.5 last:mb-0">{t}</p>
+            ))}
+          </div>
+
+          <div className="mt-4 flex flex-col gap-2">
+            <div className="flex gap-1.5 justify-center">
+              {[{ id: 'before', t: '施術前として保存' }, { id: 'after', t: '施術後として保存' }, { id: 'normal', t: 'ふだんの記録' }].map(o => (
+                <Chip key={o.id} active={phase === o.id} onClick={() => setPhase(o.id)}>{o.t}</Chip>
+              ))}
+            </div>
+            <Btn kind="moon" full onClick={saveResult}>💾 ほぞんする</Btn>
+            <Btn kind="ghost" full onClick={() => { setResult(null); setView('menu'); }}>とりなおす</Btn>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* Before / After 比較 */
+function PostureCompareScreen() {
+  const { state, back, nav } = useApp();
+  const all = [...(state.posture || [])];
+  const [mode, setMode] = useState(all.filter(p => p.mode === 'side').length >= 2 ? 'side' : 'front');
+  const list = all.filter(p => p.mode === mode);
+  const defBefore = [...list].reverse().find(p => p.phase === 'before') || list[0];
+  const defAfter = [...list].reverse().find(p => p.phase === 'after' && p.id !== defBefore?.id) || [...list].reverse().find(p => p.id !== defBefore?.id);
+  const [aId, setAId] = useState(defBefore?.id);
+  const [bId, setBId] = useState(defAfter?.id);
+  useEffect(() => {
+    const l = all.filter(p => p.mode === mode);
+    const nb = [...l].reverse().find(p => p.phase === 'before') || l[0];
+    const na = [...l].reverse().find(p => p.phase === 'after' && p.id !== nb?.id) || [...l].reverse().find(p => p.id !== nb?.id);
+    setAId(nb?.id); setBId(na?.id);
+  }, [mode]);
+
+  const A = list.find(p => p.id === aId), B = list.find(p => p.id === bId);
+
+  const deltaRows = (A && B) ? metricRows(mode, B.metrics).map((r, i) => {
+    const rowsA = metricRows(mode, A.metrics);
+    const numA = parseFloat(rowsA[i].value), numB = parseFloat(r.value);
+    const diff = numB - numA;
+    return { label: r.label, a: rowsA[i].value, b: r.value, better: diff < -0.05, worse: diff > 0.05 };
+  }) : [];
+
+  const improved = A && B ? B.score - A.score : 0;
+
+  return (
+    <div className="min-h-screen">
+      <BackHeader title="🔄 Before / After" onBack={back} />
+      <div className="p-4 pb-8">
+        <div className="flex gap-1.5 mb-3">
+          <Chip active={mode === 'side'} onClick={() => setMode('side')}>側面</Chip>
+          <Chip active={mode === 'front'} onClick={() => setMode('front')}>正面</Chip>
+        </div>
+
+        {(!A || !B) ? (
+          <div className="card">
+            <EmptyState emoji="📸" text="くらべるには2件以上の分析が必要です" sub="施術前と施術後にそれぞれ撮ってみましょう" />
+            <div className="p-4 pt-0"><Btn kind="moon" full onClick={() => nav('posture')}>姿勢分析をする</Btn></div>
+          </div>
+        ) : (
+          <div>
+            <div className="grid grid-cols-2 gap-2.5">
+              {[{ r: A, tag: 'Before', setter: setAId }, { r: B, tag: 'After', setter: setBId }].map(({ r, tag, setter }, col) => (
+                <div key={tag} className="card p-3">
+                  <p className={`text-[10px] font-black ${col ? 'text-[#4cc2ae]' : 'text-[#f0968c]'}`}>{tag}</p>
+                  {r.img
+                    ? <img src={r.img} alt={tag} className="w-full rounded-xl border border-night-400/40 mt-1.5" />
+                    : <div className="w-full aspect-[3/4] rounded-xl bg-night-500 flex items-center justify-center text-3xl mt-1.5">🧍</div>}
+                  <p className="text-center mt-2 text-[22px] font-black" style={{ color: scoreLabel(r.score).color }}>{r.score}<span className="text-[10px]">点</span></p>
+                  <select value={r.id} onChange={e => setter(e.target.value)}
+                    className="mt-1.5 w-full bg-night-600 border border-night-400/40 rounded-lg text-[10px] font-bold text-night-100 p-1.5 outline-none">
+                    {list.map(p => <option key={p.id} value={p.id}>{fmtMD(p.date)} {p.phase === 'before' ? '施術前' : p.phase === 'after' ? '施術後' : 'ふだん'} {p.score}点</option>)}
+                  </select>
+                </div>
+              ))}
+            </div>
+
+            <div className="card p-4 mt-3 text-center">
+              <p className="text-[11px] font-black text-night-200">姿勢スコアの変化</p>
+              <p className="text-[30px] font-black mt-1" style={{ color: improved >= 0 ? '#4cc2ae' : '#f0968c' }}>
+                {improved >= 0 ? '+' : ''}{improved}<span className="text-[12px]">点</span>
+              </p>
+              {improved > 0 && <p className="text-[11.5px] text-night-100 font-bold mt-1">すばらしい変化です！🎉</p>}
+            </div>
+
+            <div className="card p-4 mt-3">
+              <p className="text-[11px] font-black text-night-200 mb-2">数値のくらべっこ</p>
+              {deltaRows.map((r, i) => (
+                <div key={i} className="flex items-center gap-2 py-2 border-b border-night-500/40 last:border-0">
+                  <span className="flex-1 text-[11.5px] font-bold text-cream-50">{r.label}</span>
+                  <span className="text-[11px] text-night-200">{r.a}</span>
+                  <span className="text-night-300">→</span>
+                  <span className="text-[12px] font-black" style={{ color: r.better ? '#4cc2ae' : r.worse ? '#f0968c' : C.night100 }}>{r.b}</span>
+                  <span className="text-[13px]">{r.better ? '📉✨' : r.worse ? '📈' : '➖'}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="card-deep p-4 mt-3 flex gap-2.5 items-start">
+              <Soupy size={50} mood={improved > 0 ? 'happy' : 'sleep'} animate showZzz={false} />
+              <div>
+                <p className="text-[10.5px] font-black text-moon-300 mb-1">スーピーくんの解説</p>
+                <p className="text-[11.5px] text-night-100 leading-relaxed">
+                  {improved > 0
+                    ? (mode === 'side'
+                      ? `首のラインが整って呼吸の通り道がひろがりました。深い呼吸ができると副交感神経が働きやすくなって、今夜のねむりが変わるよ。この状態をキープするには、おうちストレッチがだいじ！`
+                      : `左右のバランスが整いました。からだの緊張がほどけると、寝返りがスムーズになって眠りが深くなるよ。おうちケアでこの状態を長もちさせよう！`)
+                    : `からだは毎日すこしずつ変化するもの。施術とおうちケアをつづけて、いっしょに整えていこうね。`}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-col gap-2">
+              <Btn kind="moon" full onClick={() => nav('care')}>🤸 キープ用ストレッチをみる</Btn>
+              <Btn kind="ghost" full onClick={() => nav('shop')}>🛍️ おすすめグッズをみる</Btn>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   SECTION 16: 来店ガイド（ご来店〜退店までの理想の導線）
+   チェックイン → カウンセリング → 姿勢(前) → 施術 → 姿勢(後)
+   → ストレッチ指導 → ご提案 → 次回案内・完了
+   ============================================================ */
+function VisitFlowScreen() {
+  const { state, update, back, nav } = useApp();
+  const [checkin, setCheckin] = useState(false);
+  const [celebrate, setCelebrate] = useState(null);
+  const vf = state.visitFlow;
+  const step = vf ? vf.step : 0;
+  const recs = useMemo(() => buildRecommendations(state), [state]);
+  const recStretchIds = [...new Set(recs.flatMap(r => r.stretch))].slice(0, 3);
+  const recProductIds = [...new Set(recs.flatMap(r => r.product))].slice(0, 3);
+  const logs7 = recentLogs(state, 7);
+  const before = vf && state.posture.find(p => p.id === vf.beforeId);
+  const after = vf && state.posture.find(p => p.id === vf.afterId);
+  const remaining = ticketRemaining(state);
+
+  const setStep = (n) => update(st => { if (st.visitFlow) st.visitFlow.step = Math.max(st.visitFlow.step, n); });
+  const togglePrescribe = (id) => update(st => {
+    if (!st.visitFlow) return;
+    const p = st.visitFlow.prescribed || [];
+    st.visitFlow.prescribed = p.includes(id) ? p.filter(x => x !== id) : [...p, id];
+  });
+
+  const complete = () => {
+    const summary = {
+      before: before ? before.score : null, after: after ? after.score : null,
+      prescribed: (vf.prescribed || []).slice(), remaining,
+    };
+    update(st => {
+      const v = st.visits[st.visits.length - 1];
+      if (v && v.date === todayStr()) v.karte = summary;
+      st.visitFlow = null;
+      gainXp(st, 30, '来店フロー完了');
+    });
+    setCelebrate(summary);
+  };
+
+  const STEPS = [
+    { icon: '🚪', title: 'ご来店・チェックイン', desc: '会員証を見せて、回数券でチェックイン',
+      content: (
+        <div>
+          <p className="text-[11.5px] text-night-100 leading-relaxed mb-3">ようこそ！受付でこの画面をお見せください。チェックインで <span className="text-moon-300 font-black">+50 XP</span>、スーピーくんがぐんと育ちます。</p>
+          <Btn kind="moon" full onClick={() => setCheckin(true)}>🏥 チェックインする</Btn>
+        </div>) },
+    { icon: '🗣️', title: 'カウンセリング', desc: '最近のねむりをスタッフと確認',
+      content: (
+        <div>
+          {logs7.length ? (
+            <div className="card-deep p-3.5 mb-3">
+              <p className="text-[10.5px] font-black text-moon-300 mb-2">この7日間のねむり（スタッフに見せてね）</p>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div><p className="text-[20px] font-black text-cream-50">{Math.round(avg(logs7.map(l => l.score)))}</p><p className="text-[9px] text-night-200">平均スコア</p></div>
+                <div><p className="text-[20px] font-black text-cream-50">{avg(logs7.map(l => sleepHours(l.bed, l.wake))).toFixed(1)}<span className="text-[10px]">h</span></p><p className="text-[9px] text-night-200">平均時間</p></div>
+                <div><p className="text-[20px] font-black text-cream-50">{avg(logs7.map(l => l.awakenings || 0)).toFixed(1)}<span className="text-[10px]">回</span></p><p className="text-[9px] text-night-200">中途覚醒</p></div>
+              </div>
+              {recs[0] && <p className="text-[10.5px] text-night-100 mt-2.5 leading-relaxed">💡 気になるポイント：{recs[0].issue.label}（{recs[0].issue.evidence}）</p>}
+            </div>
+          ) : <p className="text-[11.5px] text-night-200 mb-3">睡眠記録はまだありません。今日の状態を直接スタッフにお伝えください。</p>}
+          <Btn kind="primary" full onClick={() => setStep(2)}>確認できた ✓</Btn>
+        </div>) },
+    { icon: '📸', title: '姿勢チェック（施術前）', desc: 'いまのからだを数値で記録',
+      content: (
+        <div>
+          {before
+            ? <div className="flex items-center gap-3 mb-3 card-deep p-3">
+                {before.img && <img src={before.img} alt="" className="w-10 h-13 rounded-lg border border-night-400/40" style={{ height: 52 }} />}
+                <p className="text-[12px] font-bold text-night-100">施術前スコア <span className="text-[18px] font-black" style={{ color: scoreLabel(before.score).color }}>{before.score}点</span></p>
+              </div>
+            : <p className="text-[11.5px] text-night-100 leading-relaxed mb-3">施術の効果を実感するために、まず「いま」を記録しましょう。</p>}
+          <div className="flex flex-col gap-2">
+            <Btn kind="moon" full onClick={() => nav('posture', { phase: 'before', from: 'visit' })}>📸 姿勢分析をする</Btn>
+            {before ? <Btn kind="primary" full onClick={() => setStep(3)}>つぎへ ✓</Btn>
+              : <button onClick={() => setStep(3)} className="text-[11px] font-bold text-night-300">今回はスキップ →</button>}
+          </div>
+        </div>) },
+    { icon: '💆', title: '施術タイム', desc: '呼吸に合わせて、ゆったりリラックス',
+      content: (
+        <div className="text-center">
+          <p className="text-[11.5px] text-night-100 leading-relaxed mb-3">施術中は、ゆっくり長く息を吐くと副交感神経が働いて効果アップ。まるい光に合わせて呼吸してみてね。</p>
+          <div className="relative mx-auto w-[130px] h-[130px] mb-3">
+            <div className="absolute inset-0 rounded-full" style={{ background: 'radial-gradient(circle,#f6d97e55,#f6d97e11 60%,transparent 70%)', animation: 'breath-guide 8s ease-in-out infinite' }} />
+            <div className="absolute inset-[30px] rounded-full border-2 border-moon-400/60" style={{ animation: 'breath-guide 8s ease-in-out infinite' }} />
+            <div className="absolute inset-0 flex items-center justify-center text-[11px] font-black text-moon-300">すう…はく…</div>
+          </div>
+          <Btn kind="primary" full onClick={() => setStep(4)}>施術がおわった ✓</Btn>
+        </div>) },
+    { icon: '✨', title: '姿勢チェック（施術後）', desc: '変化をその場で体感！',
+      content: (
+        <div>
+          {after
+            ? <div className="mb-3">
+                <div className="card-deep p-3 flex items-center justify-center gap-4">
+                  {before && <span className="text-[16px] font-black text-night-200">{before.score}点</span>}
+                  {before && <span className="text-moon-300 font-black">→</span>}
+                  <span className="text-[22px] font-black" style={{ color: scoreLabel(after.score).color }}>{after.score}点</span>
+                  {before && after.score > before.score && <span className="text-[11px] font-black text-[#4cc2ae]">+{after.score - before.score} 🎉</span>}
+                </div>
+              </div>
+            : <p className="text-[11.5px] text-night-100 leading-relaxed mb-3">施術後のからだをもう一度分析して、Before/Afterをくらべてみましょう。</p>}
+          <div className="flex flex-col gap-2">
+            <Btn kind="moon" full onClick={() => nav('posture', { phase: 'after', from: 'visit' })}>📸 施術後の姿勢分析</Btn>
+            {before && after && <Btn kind="ghost" full onClick={() => nav('postureCompare')}>🔄 Before/Afterをくらべる</Btn>}
+            {after ? <Btn kind="primary" full onClick={() => setStep(5)}>つぎへ ✓</Btn>
+              : <button onClick={() => setStep(5)} className="text-[11px] font-bold text-night-300">今回はスキップ →</button>}
+          </div>
+        </div>) },
+    { icon: '🤸', title: 'ストレッチ指導', desc: 'おうち用メニューを処方してもらう',
+      content: (
+        <div>
+          <p className="text-[11.5px] text-night-100 leading-relaxed mb-2.5">今日のあなたに合うおうちストレッチ。スタッフと一緒にやり方を確認して、チェックを入れてね。</p>
+          <div className="flex flex-col gap-1.5 mb-3">
+            {recStretchIds.map(id => {
+              const s = STRETCH[id];
+              const on = (vf?.prescribed || []).includes(id);
+              return (
+                <button key={id} onClick={() => togglePrescribe(id)}
+                  className={`btn-press text-left p-3 rounded-xl border flex items-center gap-2.5 ${on ? 'border-moon-400 bg-moon-400/10' : 'border-night-400/40 bg-night-600'}`}>
+                  <span className="text-[18px]">{s.emoji}</span>
+                  <span className="flex-1">
+                    <span className="block text-[12px] font-black text-cream-50">{s.name}</span>
+                    <span className="block text-[9.5px] text-night-200">{s.area}・約{s.mins}分・{s.when}に</span>
+                  </span>
+                  <span className={`text-[16px] ${on ? '' : 'opacity-25'}`}>✅</span>
+                </button>
+              );
+            })}
+          </div>
+          <Btn kind="primary" full onClick={() => setStep(6)}>処方をうけとった ✓</Btn>
+        </div>) },
+    { icon: '🛍️', title: '本日のご提案', desc: 'あなたの睡眠に合うグッズ',
+      content: (
+        <div>
+          <p className="text-[11.5px] text-night-100 leading-relaxed mb-2.5">分析結果から、おうちの睡眠環境づくりに役立つものをご提案します。気になったらスタッフへ。</p>
+          <div className="flex flex-col gap-1.5 mb-3">
+            {recProductIds.map(id => {
+              const p = PRODUCT[id];
+              if (!p) return null;
+              return (
+                <button key={id} onClick={() => nav('product', { id })} className="btn-press card-deep p-3 flex items-center gap-2.5 text-left">
+                  <span className="text-[20px]">{p.emoji}</span>
+                  <span className="flex-1">
+                    <span className="block text-[12px] font-black text-cream-50">{p.name}</span>
+                    <span className="block text-[10px] text-moon-300 font-black">{yen(p.price)}</span>
+                  </span>
+                  <span className="text-night-300">→</span>
+                </button>
+              );
+            })}
+          </div>
+          <Btn kind="primary" full onClick={() => setStep(7)}>確認した ✓</Btn>
+        </div>) },
+    { icon: '📅', title: '次回のご案内・おわり', desc: 'お会計と次回予約',
+      content: (
+        <div>
+          <div className="card-deep p-3.5 mb-3">
+            <p className="text-[12px] font-bold text-night-100">🎫 回数券ざんだか <span className="text-[18px] font-black text-moon-300">{remaining}回</span></p>
+            <p className="text-[11px] text-night-200 mt-1.5 leading-relaxed">整えたからだは約2〜3週間かけて少しずつ戻ります。次回は <span className="text-cream-50 font-black">{fmtJP(addDays(todayStr(), 14))}</span> ごろがおすすめ。受付でご予約ください。</p>
+          </div>
+          <p className="text-[11.5px] text-night-100 leading-relaxed mb-3">おうちでは「睡眠記録」と「処方ストレッチ」を続けて、次回いっしょに変化を見ましょう。</p>
+          <Btn kind="moon" full onClick={complete}>🌙 本日はおつかれさまでした（完了）</Btn>
+        </div>) },
+  ];
+
+  return (
+    <div className="min-h-screen">
+      <BackHeader title="🏥 来店ガイド" onBack={back} />
+      <div className="p-4 pb-8">
+        {!vf && (
+          <NightSky className="rounded-3xl border border-night-500/60 mb-4">
+            <div className="p-4 flex items-center gap-3">
+              <Soupy size={80} mood="happy" showZzz={false} />
+              <div>
+                <p className="text-[14px] font-black text-cream-50 leading-snug">ご来店から退店まで、ぼくがご案内するよ！</p>
+                <p className="text-[10.5px] text-night-100 mt-1">チェックインするとガイドがはじまります</p>
+              </div>
+            </div>
+          </NightSky>
+        )}
+        <div className="flex flex-col gap-2">
+          {STEPS.map((s, i) => {
+            const done = i < step;
+            const current = i === step;
+            return (
+              <div key={i} className={`card overflow-hidden transition ${current ? 'ring-2 ring-moon-400/70' : ''} ${!done && !current ? 'opacity-55' : ''}`}>
+                <div className="flex items-center gap-3 px-4 py-3">
+                  <span className={`w-9 h-9 rounded-full flex items-center justify-center text-[16px] shrink-0 ${done ? 'bg-cpara/25' : current ? 'bg-moon-400/20' : 'bg-night-500'}`}>
+                    {done ? '✓' : s.icon}
+                  </span>
+                  <div className="flex-1">
+                    <p className={`text-[13px] font-black ${done ? 'text-night-200' : 'text-cream-50'}`}>{i + 1}. {s.title}</p>
+                    <p className="text-[10px] text-night-300">{s.desc}</p>
+                  </div>
+                  {current && <span className="text-[9px] font-black text-moon-300 bg-moon-400/10 border border-moon-400/40 rounded-full px-2 py-0.5">いまここ</span>}
+                </div>
+                {current && <div className="px-4 pb-4 anim-slide-up">{s.content}</div>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <CheckinModal open={checkin} onClose={() => setCheckin(false)} />
+
+      <Modal open={!!celebrate} onClose={() => { setCelebrate(null); back(); }}>
+        {celebrate && (
+          <div className="text-center py-2">
+            <div className="relative inline-block">
+              <Soupy size={150} mood="excited" showZzz={false} />
+              {Array.from({ length: 10 }).map((_, i) => (
+                <span key={i} className="absolute left-1/2 top-1/2 text-[16px]" style={{
+                  '--tx': `${Math.cos(i / 10 * Math.PI * 2) * 85}px`, '--ty': `${Math.sin(i / 10 * Math.PI * 2) * 85}px`,
+                  animation: `star-burst .9s ease-out ${i * 0.06}s both`,
+                }}>⭐</span>
+              ))}
+            </div>
+            <h3 className="text-[17px] font-black text-cream-50">本日もありがとうございました！</h3>
+            <div className="card-deep p-3.5 mt-3 text-left text-[11.5px] text-night-100 space-y-1">
+              {celebrate.before != null && celebrate.after != null &&
+                <p>📸 姿勢スコア {celebrate.before}点 → <span className="font-black text-[#4cc2ae]">{celebrate.after}点</span></p>}
+              <p>🤸 処方ストレッチ {celebrate.prescribed.length}こ（ケアタブから見られます）</p>
+              <p>🎫 回数券のこり {celebrate.remaining}回</p>
+              <p>🌟 +30 XP（来店フロー完了）</p>
+            </div>
+            <p className="text-[11px] text-night-200 mt-3">今夜の睡眠記録で、施術後のねむりの変化を見てみてね🌙</p>
+            <div className="mt-4"><Btn kind="moon" full onClick={() => { setCelebrate(null); back(); }}>おわる</Btn></div>
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
+/* ============================================================
+   SECTION 17: オンボーディング・設定
+   ============================================================ */
+const GOALS = [
+  { id: 'fallAsleep', label: '寝つきをよくしたい' },
+  { id: 'wakeMid', label: '夜中に起きたくない' },
+  { id: 'morning', label: '朝スッキリ起きたい' },
+  { id: 'posture', label: '肩こり・姿勢をととのえたい' },
+];
+
+function Onboarding({ onStart }) {
+  const [page, setPage] = useState(0);
+  const [name, setName] = useState('');
+  const [goal, setGoal] = useState('fallAsleep');
+  const [demo, setDemo] = useState(true);
+  return (
+    <NightSky dense className="min-h-screen">
+      <div className="mx-auto max-w-[430px] min-h-screen flex flex-col px-6 py-8">
+        {page === 0 && (
+          <div className="flex-1 flex flex-col items-center justify-center text-center anim-pop">
+            <img src="assets/logo.jpg" alt="睡眠整体サロン SLEEPY" className="w-40 rounded-3xl border border-night-400/40 shadow-2xl shadow-black/40"
+              onError={e => { e.currentTarget.style.display = 'none'; }} />
+            <div className="-mt-2"><Soupy size={170} mood="sleep" /></div>
+            <h1 className="text-[22px] font-black text-cream-50 tracking-wide">睡眠整体サロン SLEEPY</h1>
+            <p className="text-[12px] text-night-100 mt-1 font-bold">こうしき快眠パートナーアプリ</p>
+            <div className="mt-5 space-y-1.5 text-[11.5px] text-night-100 font-bold">
+              <p>🌙 ねむりを記録して、自律神経を見える化</p>
+              <p>📸 施術前後の姿勢の変化を体感</p>
+              <p>🐑 スーピーくんといっしょに快眠習慣</p>
+            </div>
+            <div className="mt-8 w-full"><Btn kind="moon" full onClick={() => setPage(1)}>はじめる</Btn></div>
+          </div>
+        )}
+        {page === 1 && (
+          <div className="flex-1 flex flex-col justify-center anim-slide-up">
+            <div className="text-center"><Soupy size={120} mood="happy" showZzz={false} /></div>
+            <h2 className="text-[18px] font-black text-cream-50 text-center">はじめまして！ぼく、スーピー！</h2>
+            <p className="text-[12px] text-night-100 text-center mt-1 mb-6 font-bold">きみのこと、おしえてほしいな</p>
+            <label className="block mb-4">
+              <span className="text-[11.5px] font-black text-night-100">おなまえ（ニックネームOK）</span>
+              <input value={name} onChange={e => setName(e.target.value)} placeholder="例）ねむこ"
+                className="mt-1.5 w-full bg-night-600 border border-night-400/50 rounded-2xl px-4 py-3.5 text-[15px] font-bold text-cream-50 outline-none focus:border-moon-400" />
+            </label>
+            <span className="text-[11.5px] font-black text-night-100">いちばんのお悩みは？</span>
+            <div className="grid grid-cols-2 gap-2 mt-1.5 mb-5">
+              {GOALS.map(g => (
+                <button key={g.id} onClick={() => setGoal(g.id)}
+                  className={`btn-press p-3 rounded-2xl border text-[11.5px] font-bold text-left ${goal === g.id ? 'bg-cream-100 text-night-900 border-cream-100' : 'bg-night-600 text-night-100 border-night-400/40'}`}>
+                  {g.label}
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setDemo(d => !d)} className={`btn-press flex items-center gap-2.5 p-3.5 rounded-2xl border text-left ${demo ? 'border-moon-400/60 bg-moon-400/10' : 'border-night-400/40 bg-night-600'}`}>
+              <span className={`text-[17px] ${demo ? '' : 'opacity-30'}`}>✅</span>
+              <span>
+                <span className="block text-[12px] font-black text-cream-50">デモデータ入りではじめる（おすすめ）</span>
+                <span className="block text-[10px] text-night-200 mt-0.5">2週間分の記録・回数券・姿勢分析のサンプルで、全機能をすぐ体験できます。設定からいつでもリセットOK。</span>
+              </span>
+            </button>
+            <div className="mt-6"><Btn kind="moon" full onClick={() => onStart(name.trim() || 'ゲスト', goal, demo)}>スーピーくんと はじめる 🌙</Btn></div>
+          </div>
+        )}
+      </div>
+    </NightSky>
+  );
+}
+
+function SettingsScreen() {
+  const { state, update, back, replaceAll } = useApp();
+  const [name, setName] = useState(state.profile.name);
+  const [confirm, setConfirm] = useState(null); // 'demo' | 'reset'
+  return (
+    <div className="min-h-screen">
+      <BackHeader title="⚙️ せってい" onBack={back} />
+      <div className="p-4 pb-8">
+        <SectionTitle icon="👤" title="プロフィール" />
+        <div className="card p-4">
+          <label className="block">
+            <span className="text-[11px] font-bold text-night-200">おなまえ</span>
+            <input value={name} onChange={e => setName(e.target.value)}
+              className="mt-1 w-full bg-night-600 border border-night-400/50 rounded-xl px-3.5 py-2.5 text-[14px] font-bold text-cream-50 outline-none focus:border-moon-400" />
+          </label>
+          <span className="block text-[11px] font-bold text-night-200 mt-3 mb-1.5">お悩み（提案のパーソナライズに使います）</span>
+          <div className="flex flex-wrap gap-1.5">
+            {GOALS.map(g => (
+              <Chip key={g.id} active={state.profile.goal === g.id} onClick={() => update(st => { st.profile.goal = g.id; })}>{g.label}</Chip>
+            ))}
+          </div>
+          <div className="mt-3"><Btn small onClick={() => { update(st => { st.profile.name = name.trim() || 'ゲスト'; }); toast('保存しました'); }}>保存する</Btn></div>
+        </div>
+
+        <SectionTitle icon="🗄️" title="データ" sub="データはこの端末のブラウザにのみ保存されます" />
+        <div className="card p-4 flex flex-col gap-2">
+          <Btn kind="ghost" full onClick={() => setConfirm('demo')}>🧪 デモデータを入れなおす</Btn>
+          <Btn kind="danger" full onClick={() => setConfirm('reset')}>🗑️ すべてのデータを削除する</Btn>
+        </div>
+
+        <SectionTitle icon="🏥" title="このアプリについて" />
+        <div className="card p-4 text-center">
+          <img src="assets/logo.jpg" alt="睡眠整体サロン SLEEPY" className="w-28 mx-auto rounded-2xl border border-night-400/40"
+            onError={e => { e.currentTarget.style.display = 'none'; }} />
+          <p className="text-[13px] font-black text-cream-50 mt-3">睡眠整体サロン SLEEPY</p>
+          <p className="text-[10.5px] text-night-200 mt-0.5">Produced by KADOMORI</p>
+          <p className="text-[10px] text-night-300 mt-2 leading-relaxed">公式快眠パートナーアプリ v1.0<br />マスコット：スーピーくん 🐑</p>
+        </div>
+      </div>
+
+      <Modal open={!!confirm} onClose={() => setConfirm(null)}>
+        <div className="text-center py-2">
+          <span className="text-[40px]">{confirm === 'reset' ? '🗑️' : '🧪'}</span>
+          <h3 className="text-[15px] font-black text-cream-50 mt-2">{confirm === 'reset' ? 'すべてのデータを削除しますか？' : 'デモデータで上書きしますか？'}</h3>
+          <p className="text-[11.5px] text-night-200 mt-1.5">いまの記録・スーピーくんの成長は元に戻せません。</p>
+          <div className="mt-4 flex gap-2">
+            <Btn kind="ghost" full onClick={() => setConfirm(null)}>やめる</Btn>
+            <Btn kind="danger" full onClick={() => {
+              if (confirm === 'reset') { replaceAll(defaultState()); }
+              else { replaceAll(seedDemoState(state.profile.name, state.profile.goal)); toast('デモデータを入れました'); }
+              setConfirm(null); back();
+            }}>実行する</Btn>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+/* ============================================================
+   SECTION 18: アプリシェル（ルーター・タブバー・レベルアップ）
+   ============================================================ */
+const TAB_SCREENS = ['home', 'sleep', 'soupy', 'care', 'shop'];
+
+function TabBar({ current, onTab }) {
+  const tabs = [
+    { id: 'home', icon: '🏠', label: 'ホーム' },
+    { id: 'sleep', icon: '🌙', label: 'すいみん' },
+    { id: 'soupy', icon: null, label: 'そだてる' },
+    { id: 'care', icon: '🤸', label: 'ケア' },
+    { id: 'shop', icon: '🛍️', label: 'ショップ' },
+  ];
+  return (
+    <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] z-50 px-3 pb-3">
+      <div className="bg-night-800/95 border border-night-500/60 rounded-3xl shadow-2xl shadow-black/50 flex items-end justify-around px-1 pt-1.5 pb-2" style={{ backdropFilter: 'blur(12px)' }}>
+        {tabs.map(t => {
+          const active = current === t.id;
+          if (t.id === 'soupy') return (
+            <button key={t.id} onClick={() => onTab(t.id)} className="btn-press relative -mt-7 flex flex-col items-center" aria-label="そだてる">
+              <span className={`w-14 h-14 rounded-full flex items-center justify-center border-4 ${active ? 'border-moon-400' : 'border-night-500'} bg-night-700 shadow-lg shadow-black/40 overflow-hidden`}>
+                <div className="mt-2"><Soupy size={44} animate={false} showZzz={false} /></div>
+              </span>
+              <span className={`text-[9px] font-black mt-1 ${active ? 'text-moon-300' : 'text-night-200'}`}>{t.label}</span>
+            </button>
+          );
+          return (
+            <button key={t.id} onClick={() => onTab(t.id)} className="btn-press flex flex-col items-center gap-0.5 px-2.5 py-1" aria-label={t.label}>
+              <span className={`text-[19px] ${active ? '' : 'grayscale opacity-60'}`}>{t.icon}</span>
+              <span className={`text-[9px] font-black ${active ? 'text-moon-300' : 'text-night-300'}`}>{t.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function LevelUpModal({ info, onClose }) {
+  if (!info) return null;
+  return (
+    <Modal open onClose={onClose}>
+      <div className="text-center py-2">
+        <div className="relative inline-block">
+          <Soupy size={160} mood="excited" showZzz={false} />
+          {Array.from({ length: 12 }).map((_, i) => (
+            <span key={i} className="absolute left-1/2 top-1/2 text-[17px]" style={{
+              '--tx': `${Math.cos(i / 12 * Math.PI * 2) * 95}px`, '--ty': `${Math.sin(i / 12 * Math.PI * 2) * 95}px`,
+              animation: `star-burst 1s ease-out ${i * 0.05}s both`,
+            }}>{i % 3 === 0 ? '🌟' : i % 3 === 1 ? '⭐' : '✨'}</span>
+          ))}
+        </div>
+        <p className="text-[12px] font-black text-moon-300 tracking-widest">LEVEL UP!</p>
+        <h3 className="text-[20px] font-black text-cream-50 mt-1">スーピーくんが Lv.{info.lv} になった！</h3>
+        <p className="text-[12px] text-night-100 font-bold mt-1">「{stageTitle(info.lv)}」</p>
+        {info.unlocked.length > 0 && (
+          <div className="card-deep p-3.5 mt-3">
+            <p className="text-[10.5px] font-black text-moon-300 mb-1.5">🎁 あたらしい きせかえ！</p>
+            {info.unlocked.map(a => <p key={a.id} className="text-[13px] font-black text-cream-50">{a.emoji} {a.name}</p>)}
+            <p className="text-[10px] text-night-200 mt-1.5">「そだてる」タブでそうびできます</p>
+          </div>
+        )}
+        <div className="mt-4"><Btn kind="moon" full onClick={onClose}>やったー！</Btn></div>
+      </div>
+    </Modal>
+  );
+}
+
+class ErrorBoundary extends React.Component {
+  constructor(p) { super(p); this.state = { err: null }; }
+  static getDerivedStateFromError(err) { return { err }; }
+  render() {
+    if (this.state.err) return (
+      <div className="mx-auto max-w-[430px] min-h-screen flex flex-col items-center justify-center p-8 text-center">
+        <span className="text-[46px]">😴💦</span>
+        <p className="text-[14px] font-black text-cream-50 mt-3">ごめんなさい、エラーがおきました</p>
+        <p className="text-[10px] text-night-300 mt-2 break-all">{String(this.state.err)}</p>
+        <button className="mt-4 px-5 py-3 rounded-2xl bg-cream-100 text-night-900 font-black text-[13px]" onClick={() => location.reload()}>再読み込み</button>
+      </div>
+    );
+    return this.props.children;
+  }
+}
+
+function App() {
+  const [state, setState] = useState(loadState);
+  const [stack, setStack] = useState([{ name: 'home' }]);
+  const [levelUp, setLevelUp] = useState(null);
+  const prevLvRef = useRef(levelFromXp(state.soupy.xp).lv);
+
+  useEffect(() => {
+    const lv = levelFromXp(state.soupy.xp).lv;
+    if (lv > prevLvRef.current) {
+      setLevelUp({ lv, unlocked: ACCESSORIES.filter(a => a.lv > prevLvRef.current && a.lv <= lv) });
+    }
+    prevLvRef.current = lv;
+  }, [state.soupy.xp]);
+
+  const update = useCallback((fn) => setState(prev => { const n = structuredClone(prev); fn(n); saveState(n); return n; }), []);
+  const replaceAll = useCallback((st) => { saveState(st); prevLvRef.current = levelFromXp(st.soupy.xp).lv; setState(st); setStack([{ name: 'home' }]); }, []);
+  const nav = useCallback((name, params) => {
+    setStack(s => TAB_SCREENS.includes(name) ? [{ name, params }] : [...s, { name, params }]);
+  }, []);
+  const back = useCallback(() => setStack(s => s.length > 1 ? s.slice(0, -1) : [{ name: 'home' }]), []);
+
+  useEffect(() => { window.scrollTo(0, 0); }, [stack.length, stack[stack.length - 1].name]);
+
+  const route = stack[stack.length - 1];
+  const isTab = stack.length === 1 && TAB_SCREENS.includes(route.name);
+
+  if (!state.onboarded) {
+    return <Onboarding onStart={(name, goal, demo) => {
+      const st = demo ? seedDemoState(name, goal) : (() => { const d = defaultState(); d.onboarded = true; d.profile.name = name; d.profile.goal = goal; return d; })();
+      replaceAll(st);
+      toast(`ようこそ、${name}さん！🐑`);
+    }} />;
+  }
+
+  let screen = null;
+  switch (route.name) {
+    case 'home': screen = <HomeScreen />; break;
+    case 'sleep': screen = <SleepScreen route={route} />; break;
+    case 'soupy': screen = <SoupyScreen />; break;
+    case 'care': screen = <CareScreen route={route} />; break;
+    case 'shop': screen = <ShopScreen />; break;
+    case 'stretchPlay': screen = <StretchPlayScreen route={route} />; break;
+    case 'article': screen = <ArticleScreen route={route} />; break;
+    case 'product': screen = <ProductScreen route={route} />; break;
+    case 'cart': screen = <CartScreen />; break;
+    case 'member': screen = <MemberScreen />; break;
+    case 'posture': screen = <PostureScreen route={route} />; break;
+    case 'postureCompare': screen = <PostureCompareScreen />; break;
+    case 'visit': screen = <VisitFlowScreen />; break;
+    case 'settings': screen = <SettingsScreen />; break;
+    default: screen = <HomeScreen />;
+  }
+
+  return (
+    <Ctx.Provider value={{ state, update, replaceAll, nav, back, route }}>
+      <div className="mx-auto max-w-[430px] min-h-screen relative shadow-2xl shadow-black/60"
+        style={{ background: 'linear-gradient(180deg,#0d1424 0%,#121a2e 40%,#0d1424 100%)', paddingBottom: isTab ? 96 : 24 }}>
+        <div key={stack.length + ':' + route.name}>{screen}</div>
+        {isTab && <TabBar current={route.name} onTab={t => nav(t)} />}
+        <LevelUpModal info={levelUp} onClose={() => setLevelUp(null)} />
+      </div>
+    </Ctx.Provider>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<ErrorBoundary><App /></ErrorBoundary>);
+</script>
+</body>
+</html>
