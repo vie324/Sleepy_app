@@ -1157,25 +1157,41 @@ function ParallaxTilt({ children, max = 7, className = '' }) {
   );
 }
 
-/* 3Dモデル差し替えフック:
-   http(s)配信時に assets/soupy.glb が存在すれば <model-viewer> で3D表示。
-   なければ（file://含む）SVGスーピーくん + 視差チルトに自動フォールバック。 */
+/* キャラクター表示の自動アップグレードフック（http(s)配信時のみ）:
+   ① assets/soupy.webm / soupy.mp4 …… リール級のアニメーション動画（最優先）
+   ② assets/soupy.glb ……………………… リアルタイム3D（model-viewer）
+   ③ SVGスーピーくん + 擬似3Dチルト … どの環境でも動くフォールバック */
 function Soupy3DOrSvg(props) {
-  const [use3d, setUse3d] = useState(false);
+  const [mode, setMode] = useState('svg'); // svg | glb | video
+  const [videoSrc, setVideoSrc] = useState(null);
   useEffect(() => {
     if (location.protocol === 'file:') return;
-    fetch('assets/soupy.glb', { method: 'HEAD' }).then(r => {
-      if (!r.ok) return;
-      const s = document.createElement('script');
-      s.type = 'module'; s.src = 'vendor/model-viewer.min.js';
-      s.onload = () => setUse3d(true);
-      document.head.appendChild(s);
-    }).catch(() => {});
+    let cancelled = false;
+    const head = (u) => fetch(u, { method: 'HEAD' }).then(r => r.ok).catch(() => false);
+    (async () => {
+      for (const src of ['assets/soupy.webm', 'assets/soupy.mp4']) {
+        if (await head(src)) { if (!cancelled) { setVideoSrc(src); setMode('video'); } return; }
+      }
+      if (await head('assets/soupy.glb')) {
+        const s = document.createElement('script');
+        s.type = 'module'; s.src = 'vendor/model-viewer.min.js';
+        s.onload = () => { if (!cancelled) setMode('glb'); };
+        document.head.appendChild(s);
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
-  if (use3d) {
+  if (mode === 'video') {
+    return (
+      <video src={videoSrc} autoPlay muted loop playsInline onError={() => setMode('svg')}
+        onClick={props.onTap}
+        style={{ width: props.size, height: props.size * (270 / 260), objectFit: 'cover', borderRadius: 26, display: 'inline-block' }} />
+    );
+  }
+  if (mode === 'glb') {
     return (
       <model-viewer
-        ref={el => { if (el && !el.__spErrHooked) { el.__spErrHooked = true; el.addEventListener('error', () => setUse3d(false)); } }}
+        ref={el => { if (el && !el.__spErrHooked) { el.__spErrHooked = true; el.addEventListener('error', () => setMode('svg')); } }}
         src="assets/soupy.glb" autoplay camera-controls disable-zoom auto-rotate auto-rotate-delay="1500"
         interaction-prompt="none" shadow-intensity="1" exposure="1.05"
         camera-orbit="0deg 82deg 105%" style={{ width: props.size, height: props.size * (270 / 260), display: 'inline-block' }} />
@@ -4464,6 +4480,16 @@ function SettingsScreen() {
 
         <SectionTitle icon="🗄️" title="データ" sub="データはこの端末のブラウザにのみ保存されます" />
         <div className="card p-4 flex flex-col gap-2">
+          <Btn kind="moon" full onClick={() => {
+            const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `sleepy_${state.profile.memberNo}.json`;
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+            toast('書き出しました。受付でスタッフにお渡しください 📲');
+          }}>📤 データを書き出す（サロン連携用）</Btn>
+          <p className="text-[10px] text-night-300 leading-relaxed px-1">書き出したファイルをサロンの管理コンソールに取り込むと、スタッフがあなたの睡眠・姿勢データを見ながらカウンセリングできます。</p>
           <Btn kind="ghost" full onClick={() => setConfirm('demo')}>🧪 デモデータを入れなおす</Btn>
           <Btn kind="danger" full onClick={() => setConfirm('reset')}>🗑️ すべてのデータを削除する</Btn>
         </div>
@@ -4488,8 +4514,10 @@ function SettingsScreen() {
               </div>
             </div>
           </div>
-          <p className="text-[10px] text-night-300 mt-4 leading-relaxed">公式快眠パートナーアプリ v2.0<br />マスコット：スーピーくん 🐑</p>
+          <p className="text-[10px] text-night-300 mt-4 leading-relaxed">公式快眠パートナーアプリ v3.0<br />マスコット：スーピーくん 🐑</p>
         </div>
+
+        <a href="admin.html" className="block text-center text-[10.5px] font-bold text-night-300 underline mt-4 mb-2">🔧 スタッフ・管理者の方はこちら（管理コンソール）</a>
       </div>
 
       <Modal open={!!confirm} onClose={() => setConfirm(null)}>
