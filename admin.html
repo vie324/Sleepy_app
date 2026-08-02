@@ -41,7 +41,9 @@ tailwind.config = {
 </script>
 <style>
   * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
-  body { font-family: "Zen Maru Gothic","Noto Sans JP",sans-serif; margin:0; background:#0d1424; color:#eef1f8; }
+  body { font-family: "Noto Sans JP","Hiragino Sans",sans-serif; margin:0; background:#0d1424; color:#eef1f8; letter-spacing:.01em; }
+  .kicker { font-size:9px; font-weight:700; letter-spacing:.32em; color:#d9b45c; text-transform:uppercase; }
+  .tabular { font-variant-numeric: tabular-nums; }
   ::-webkit-scrollbar { width:8px; height:8px; }
   ::-webkit-scrollbar-thumb { background:#2b3a5e; border-radius:8px; }
   input, select, textarea, button { font-family: inherit; }
@@ -51,8 +53,8 @@ tailwind.config = {
   .anim-pop { animation: pop-in .3s cubic-bezier(.2,1.4,.4,1) both; }
   .anim-slide-up { animation: slide-up .35s ease both; }
   .anim-floaty { animation: floaty 3.4s ease-in-out infinite; }
-  .card { background:#222e4c; border:1px solid rgba(199,206,222,.08); border-radius:16px; }
-  .card-deep { background:#1a2440; border:1px solid rgba(199,206,222,.07); border-radius:16px; }
+  .card { background:#212c48; border:1px solid rgba(199,206,222,.13); border-radius:12px; }
+  .card-deep { background:#1a2440; border:1px solid rgba(199,206,222,.10); border-radius:10px; }
   .btn-press { transition: transform .12s ease; }
   .btn-press:active { transform: scale(.96); }
   #toast-root { position:fixed; top:14px; left:50%; transform:translateX(-50%); z-index:9999; display:flex; flex-direction:column; gap:8px; pointer-events:none; width:min(92vw,420px); }
@@ -68,6 +70,97 @@ tailwind.config = {
 
 <script type="text/babel" data-presets="react">
 const { useState, useEffect, useRef, useMemo, useCallback, createContext, useContext } = React;
+
+const ICONS = {
+  home: <g><path d="M3.5 10.5 12 3.8l8.5 6.7" /><path d="M5.5 9.5V20h13V9.5" /><path d="M10 20v-5h4v5" /></g>,
+  moon: <path d="M20.2 13.6A8.3 8.3 0 1 1 10.4 3.8a6.7 6.7 0 1 0 9.8 9.8z" />,
+  sun: <g><circle cx="12" cy="12" r="3.8" /><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6" /></g>,
+  star: <path d="m12 3.4 2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 16.8l-5.2 2.8 1-5.9-4.3-4.1 5.9-.8z" />,
+  sparkle: <g><path d="M11 4.5 12.6 9l4.5 1.6-4.5 1.6L11 16.7 9.4 12.2 4.9 10.6 9.4 9z" /><path d="m18.5 15.5.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z" /></g>,
+  heart: <path d="M12 20.2S3.8 15.3 2.9 10.4A4.7 4.7 0 0 1 12 7.1a4.7 4.7 0 0 1 9.1 3.3c-.9 4.9-9.1 9.8-9.1 9.8z" />,
+  pencil: <g><path d="m4.5 19.5.9-3.6L16.6 4.7a2 2 0 0 1 2.8 2.8L8.2 18.6l-3.7.9z" /><path d="m14.7 6.6 2.8 2.8" /></g>,
+  camera: <g><rect x="3" y="7" width="18" height="13" rx="2.2" /><path d="M8.5 7 10 4.2h4L15.5 7" /><circle cx="12" cy="13.2" r="3.4" /></g>,
+  chart: <g><path d="M3.5 20.5h17" /><path d="m6 16 4-5.2 3.2 3L18.5 7" /><circle cx="18.5" cy="7" r="1.1" /></g>,
+  clock: <g><circle cx="12" cy="12" r="8.6" /><path d="M12 7.2V12l3.2 2" /></g>,
+  scales: <g><path d="M12 4v16.5M7.5 20.5h9" /><path d="M12 6.5h6.5M12 6.5H5.5" /><path d="m5.5 6.5-2.3 5.6a2.6 2.6 0 0 0 4.6 0zM18.5 6.5l-2.3 5.6a2.6 2.6 0 0 0 4.6 0z" /></g>,
+  bulb: <g><path d="M9.2 17.5h5.6M10.2 20.5h3.6" /><path d="M12 3.2a5.9 5.9 0 0 1 3.4 10.7c-.6.5-.9 1-1 1.9h-4.8c-.1-.9-.4-1.4-1-1.9A5.9 5.9 0 0 1 12 3.2z" /></g>,
+  ticket: <g><path d="M4 8.2a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v1.6a2.2 2.2 0 0 0 0 4.4v1.6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-1.6a2.2 2.2 0 0 0 0-4.4z" /><path d="M14.5 8.5v1M14.5 11.5v1M14.5 14.5v1" /></g>,
+  card: <g><rect x="3" y="5.5" width="18" height="13.5" rx="2.2" /><path d="M3 10h18M7 15h4.5" /></g>,
+  gear: <g><circle cx="12" cy="12" r="3" /><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.1 5.1l1.7 1.7M17.2 17.2l1.7 1.7M5.1 18.9l1.7-1.7M17.2 6.8l1.7-1.7" /></g>,
+  lock: <g><rect x="5" y="10.8" width="14" height="9.2" rx="2" /><path d="M8.2 10.8V8a3.8 3.8 0 0 1 7.6 0v2.8" /></g>,
+  bell: <g><path d="M6.2 9.5a5.8 5.8 0 0 1 11.6 0c0 4.6 1.8 5.7 1.8 5.7H4.4s1.8-1.1 1.8-5.7z" /><path d="M10.4 19.5a1.7 1.7 0 0 0 3.2 0" /></g>,
+  users: <g><circle cx="9" cy="8.2" r="3.4" /><path d="M3.6 19.8a5.4 5.4 0 0 1 10.8 0" /><path d="M15.8 5.1a3.4 3.4 0 0 1 0 6.3M17.6 14.8a5.4 5.4 0 0 1 2.9 5" /></g>,
+  user: <g><circle cx="12" cy="8" r="3.8" /><path d="M5.2 20.5a6.8 6.8 0 0 1 13.6 0" /></g>,
+  search: <g><circle cx="11" cy="11" r="6.4" /><path d="m19.8 19.8-3.6-3.6" /></g>,
+  yen: <g><path d="m7 4.5 5 7 5-7M12 11.5v8M8.5 13.8h7M8.5 16.8h7" /></g>,
+  bag: <g><path d="M6.2 8h11.6l-.9 12H7.1z" /><path d="M9.2 8V6a2.8 2.8 0 0 1 5.6 0v2" /></g>,
+  cart: <g><circle cx="9.5" cy="19.8" r="1.3" /><circle cx="16.8" cy="19.8" r="1.3" /><path d="M3.5 4.5h2l2.3 10.5h9.4l2.3-7.5H7" /></g>,
+  box: <g><path d="m12 3.2 7.8 4.4v8.8L12 20.8l-7.8-4.4V7.6z" /><path d="m12 12 7.8-4.4M12 12 4.2 7.6M12 12v8.8" /></g>,
+  calendar: <g><rect x="4" y="5.8" width="16" height="14.2" rx="2" /><path d="M8 3.2v4M16 3.2v4M4 10.8h16" /></g>,
+  file: <g><path d="M7 3.2h7l4 4v13.6H7z" /><path d="M13.6 3.2v4.4H18M9.6 13h5M9.6 16.2h5" /></g>,
+  pill: <g><path d="M8.3 3.9a4.6 4.6 0 0 1 6.5 0l5.3 5.3a4.6 4.6 0 0 1-6.5 6.5L8.3 10.4a4.6 4.6 0 0 1 0-6.5z" /><path d="m11.5 7.1 5.4 5.4" /></g>,
+  check: <path d="m4.8 12.6 4.6 4.6L19.2 6.6" />,
+  close: <path d="m6 6 12 12M18 6 6 18" />,
+  arrowR: <path d="M5 12h13M13.5 6.5 19 12l-5.5 5.5" />,
+  play: <path d="M8.2 5.5v13l10.6-6.5z" />,
+  pause: <path d="M8.5 5.5v13M15.5 5.5v13" />,
+  download: <path d="M12 3.5v10.7M7.4 10.2l4.6 4.6 4.6-4.6M5 20h14" />,
+  upload: <path d="M12 14.2V3.5M7.4 7.8 12 3.2l4.6 4.6M5 20h14" />,
+  trash: <g><path d="M4.5 7h15M9.5 7V4.5h5V7M6.8 7l.9 13h8.6l.9-13" /><path d="M10 11v5.5M14 11v5.5" /></g>,
+  info: <g><circle cx="12" cy="12" r="8.6" /><path d="M12 11v5.4M12 7.4v.2" /></g>,
+  coffee: <g><path d="M4.5 8.5h12v5.3a4.7 4.7 0 0 1-4.7 4.7H9.2a4.7 4.7 0 0 1-4.7-4.7z" /><path d="M16.5 9.5h1.8a2.4 2.4 0 0 1 0 4.8h-1.8" /><path d="M8 3.2c0 1.1-1 1.2-1 2.3M12 3.2c0 1.1-1 1.2-1 2.3" /></g>,
+  phone: <g><rect x="7" y="2.8" width="10" height="18.4" rx="2.4" /><path d="M10.8 18.4h2.4" /></g>,
+  bath: <g><path d="M4 12.5h16v2.3a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z" /><path d="M6 12.5V5.8A2.3 2.3 0 0 1 10.5 5" /><path d="M12.5 9.5c0-.9.8-.9.8-1.8M15.5 9.5c0-.9.8-.9.8-1.8" /></g>,
+  wine: <g><path d="M9 3.5h6l-.5 5.3a2.5 2.5 0 0 1-5 0z" /><path d="M12 11.3v6.9M9.2 20.5h5.6" /></g>,
+  bowl: <g><path d="M4.2 12a7.8 7.8 0 0 0 15.6 0z" /><path d="M9.5 12V8.8M13 12V7.6M16.2 12V9.4" /></g>,
+  zzz: <g><path d="M5.5 14.5h4.6l-4.6 5h4.6" /><path d="M14.5 5.5h3.8l-3.8 4.2h3.8" /></g>,
+  walk: <g><circle cx="13.4" cy="4.4" r="1.7" /><path d="m13.2 7.2-1.8 4.6 2.8 2.6 1 5M11.4 11.8l-2.9 1.7-.9 3.7M13.8 8.4l2.8 1.5 2.2.4" /></g>,
+  bed: <g><path d="M3.5 6.5v11.7M3.5 14.5h17v3.7M20.5 14.5v-2a2.8 2.8 0 0 0-2.8-2.8H11v4.8" /><circle cx="7" cy="11.2" r="1.9" /></g>,
+  glasses: <g><circle cx="7" cy="14.2" r="3.1" /><circle cx="17" cy="14.2" r="3.1" /><path d="M10.1 14.2h3.8M3.9 12.7 5.4 6.5h1.8M20.1 12.7 18.6 6.5h-1.8" /></g>,
+  cup: <g><path d="M5 9.2h11v4.8a4.8 4.8 0 0 1-4.8 4.8H9.8A4.8 4.8 0 0 1 5 14z" /><path d="M16 10.2h1.4a2.4 2.4 0 0 1 0 4.8H16" /><path d="M9 4c0 1-1 1.1-1 2.2M12.5 4c0 1-1 1.1-1 2.2" /></g>,
+  droplet: <path d="M12 3.6S6.2 10 6.2 14.4a5.8 5.8 0 0 0 11.6 0C17.8 10 12 3.6 12 3.6z" />,
+  wind: <g><path d="M3.5 8.2h8.3A2.3 2.3 0 1 0 9.6 5" /><path d="M3.5 12.2h13.2a2.3 2.3 0 1 1-2.2 2.9" /><path d="M3.5 16.2h6.1a2 2 0 1 1-1.9 2.5" /></g>,
+  waves: <path d="M4.5 9.5v5M8.2 6.5v11M12 8.5v7M15.8 4.5v15M19.5 10v4" />,
+  headphones: <g><path d="M4.5 14.5v-1.7a7.5 7.5 0 0 1 15 0v1.7" /><rect x="3.5" y="14" width="4.2" height="6" rx="1.6" /><rect x="16.3" y="14" width="4.2" height="6" rx="1.6" /></g>,
+  rain: <g><path d="M7.2 15.5a4.4 4.4 0 0 1 .7-8.7A5.3 5.3 0 0 1 18.2 8.6a3.6 3.6 0 0 1-.6 6.9H7.2z" /><path d="m8.6 18.5-.8 2.2M12.6 18.5l-.8 2.2M16.6 18.5l-.8 2.2" /></g>,
+  clipboard: <g><rect x="5.5" y="4.5" width="13" height="16.5" rx="2" /><path d="M9.3 4.5V3h5.4v1.5" /><path d="M9 11h6M9 14.8h6" /></g>,
+  flask: <g><path d="M10 3.2h4M10.6 3.2v5.2L5.7 18a2 2 0 0 0 1.8 2.8h9a2 2 0 0 0 1.8-2.8l-4.9-9.6V3.2" /><path d="M8 14.5h8" /></g>,
+  stretch: <g><circle cx="12" cy="4.3" r="1.8" /><path d="M12 6.8v6M12 9 7.6 6.8M12 9l4.4-2.2M12 12.8l-3.2 6.4M12 12.8l3.2 6.4" /></g>,
+  building: <g><rect x="5" y="3.5" width="14" height="17" /><path d="M9.5 20.5v-3.8h5v3.8" /><path d="M9 7.2h1.8M13.2 7.2H15M9 11h1.8M13.2 11H15" /></g>,
+  flag: <g><path d="M6 21V4.2" /><path d="M6 4.8c4-2.2 8 2 12 0v8.4c-4 2.2-8-2-12 0" /></g>,
+  gift: <g><rect x="4" y="9.5" width="16" height="4" /><path d="M6 13.5V21h12v-7.5M12 9.5V21" /><path d="M12 9.5c-2 0-4.5-.7-4.5-2.8A2.2 2.2 0 0 1 12 6a2.2 2.2 0 0 1 4.5.7c0 2.1-2.5 2.8-4.5 2.8z" /></g>,
+  crown: <path d="m4.5 18.5-1.3-9 4.9 3.3L12 6.2l3.9 6.6 4.9-3.3-1.3 9z" />,
+  lamp: <g><path d="M9 3.5h6l2.8 7.5H6.2z" /><path d="M12 11v6.8M8.2 20.5h7.6" /></g>,
+  layers: <g><path d="m12 3.5 8.5 4.7L12 12.9 3.5 8.2z" /><path d="m3.5 13 8.5 4.7L20.5 13" /></g>,
+  compare: <g><path d="M8 7h12M16.5 3.5 20 7l-3.5 3.5" /><path d="M16 17H4M7.5 20.5 4 17l3.5-3.5" /></g>,
+  refresh: <g><path d="M19.8 11a8 8 0 1 0-2.2 6.4" /><path d="M20 4.8V11h-6.2" /></g>,
+  list: <path d="M8.5 6h12M8.5 12h12M8.5 18h12M4 6h.01M4 12h.01M4 18h.01" />,
+  bolt: <path d="m13 2.5-8 11h4.6L10.8 21.5l8.2-11h-4.6z" />,
+  logout: <g><path d="M14 4H6.5A1.5 1.5 0 0 0 5 5.5v13A1.5 1.5 0 0 0 6.5 20H14" /><path d="M10.5 12H21M17.5 8.5 21 12l-3.5 3.5" /></g>,
+};
+function Icon({ name, size = 18, className = '', strokeWidth = 1.7, style }) {
+  const body = ICONS[name];
+  if (!body) return null;
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"
+      className={`inline-block shrink-0 ${className}`} style={style} aria-hidden="true">{body}</svg>
+  );
+}
+// アイコン付きの丸タイル（旧・絵文字タイルの置き換え）
+function IconTile({ name, size = 40, iconSize, className = '', tone = 'default' }) {
+  const tones = {
+    default: 'bg-night-500/70 text-cream-100',
+    gold: 'bg-moon-400/12 text-moon-300 border border-moon-400/30',
+    dim: 'bg-night-500/50 text-night-100',
+  };
+  return (
+    <span className={`inline-flex items-center justify-center rounded-[10px] ${tones[tone]} ${className}`}
+      style={{ width: size, height: size }}>
+      <Icon name={name} size={iconSize || Math.round(size * 0.52)} />
+    </span>
+  );
+}
 
 /* ============================================================
    共通ユーティリティ（顧客アプリ index.html と同一ロジック）
@@ -115,14 +208,14 @@ function toast(msg, type) {
 
 // 行動チェック（スコア計算・表示ラベル用の要約版）
 const HABITS = [
-  { id:'sun', label:'朝の光', icon:'☀️', good:true, score:+3, symp:0, para:12 },
-  { id:'exercise', label:'日中の運動', icon:'🚶', good:true, score:+3, symp:0, para:10 },
-  { id:'bath', label:'湯船', icon:'🛁', good:true, score:+4, symp:0, para:15 },
-  { id:'caffeine', label:'午後カフェイン', icon:'☕', good:false, score:-4, symp:14, para:0 },
-  { id:'phone', label:'寝る前スマホ', icon:'📱', good:false, score:-4, symp:14, para:0 },
-  { id:'alcohol', label:'寝酒', icon:'🍺', good:false, score:-4, symp:10, para:0 },
-  { id:'lateMeal', label:'遅い食事', icon:'🍜', good:false, score:-3, symp:8, para:0 },
-  { id:'longNap', label:'長い昼寝', icon:'💤', good:false, score:-2, symp:5, para:0 },
+  { id:'sun', label:'朝の光', icon:'sun', good:true, score:+3, symp:0, para:12 },
+  { id:'exercise', label:'日中の運動', icon:'walk', good:true, score:+3, symp:0, para:10 },
+  { id:'bath', label:'湯船', icon:'bath', good:true, score:+4, symp:0, para:15 },
+  { id:'caffeine', label:'午後カフェイン', icon:'coffee', good:false, score:-4, symp:14, para:0 },
+  { id:'phone', label:'寝る前スマホ', icon:'phone', good:false, score:-4, symp:14, para:0 },
+  { id:'alcohol', label:'寝酒', icon:'wine', good:false, score:-4, symp:10, para:0 },
+  { id:'lateMeal', label:'遅い食事', icon:'bowl', good:false, score:-3, symp:8, para:0 },
+  { id:'longNap', label:'長い昼寝', icon:'zzz', good:false, score:-2, symp:5, para:0 },
 ];
 const HABIT = Object.fromEntries(HABITS.map(h => [h.id, h]));
 
@@ -177,31 +270,31 @@ const stageTitle = (lv) => [...STAGES].reverse().find(s => lv >= s.min).title;
 
 // 商品・プラン・ストレッチの表示名（顧客データ参照用の要約マスタ）
 const PRODUCT = {
-  p_pillow:{ emoji:'🛏️', name:'SLEEPY オリジナル快眠まくら', price:12800 },
-  p_bath:{ emoji:'🛁', name:'重炭酸 入浴タブレット 30錠', price:2480 },
-  p_tea:{ emoji:'🍵', name:'おやすみハーブティー 30包', price:1780 },
-  p_glasses:{ emoji:'👓', name:'ブルーライトカットメガネ', price:4980 },
-  p_pole:{ emoji:'🧘', name:'ストレッチポール', price:8800 },
-  p_mask:{ emoji:'🎭', name:'シルクアイマスク', price:2980 },
-  p_spray:{ emoji:'🌿', name:'ラベンダー ピロースプレー', price:1980 },
-  p_gaba:{ emoji:'💊', name:'GABA配合 おやすみサプリ 30日分', price:3980 },
-  t_5:{ emoji:'🎫', name:'施術回数券（5回）', price:27500, ticket:{ count:5, months:6 } },
-  t_10:{ emoji:'🎫', name:'施術回数券（10回）', price:52000, ticket:{ count:10, months:12 } },
+  p_pillow:{ icon:'bed', name:'SLEEPY オリジナル快眠まくら', price:12800 },
+  p_bath:{ icon:'bath', name:'重炭酸 入浴タブレット 30錠', price:2480 },
+  p_tea:{ icon:'cup', name:'おやすみハーブティー 30包', price:1780 },
+  p_glasses:{ icon:'glasses', name:'ブルーライトカットメガネ', price:4980 },
+  p_pole:{ icon:'stretch', name:'ストレッチポール', price:8800 },
+  p_mask:{ icon:'moon', name:'シルクアイマスク', price:2980 },
+  p_spray:{ icon:'droplet', name:'ラベンダー ピロースプレー', price:1980 },
+  p_gaba:{ icon:'pill', name:'GABA配合 おやすみサプリ 30日分', price:3980 },
+  t_5:{ icon:'ticket', name:'施術回数券（5回）', price:27500, ticket:{ count:5, months:6 } },
+  t_10:{ icon:'ticket', name:'施術回数券（10回）', price:52000, ticket:{ count:10, months:12 } },
 };
 const SUB_PLAN = {
-  sub_light:{ emoji:'🌙', name:'整えライト会員', price:10800, cadence:'月1回', color:'#6d82ec' },
-  sub_std:{ emoji:'✨', name:'整えスタンダード会員', price:19800, cadence:'月2回', color:'#eec25a' },
-  sub_care:{ emoji:'📦', name:'おうちケア定期便', price:2980, cadence:'毎月', color:'#25a08c' },
+  sub_light:{ icon:'moon', name:'整えライト会員', price:10800, cadence:'月1回', color:'#6d82ec' },
+  sub_std:{ icon:'sparkle', name:'整えスタンダード会員', price:19800, cadence:'月2回', color:'#eec25a' },
+  sub_care:{ icon:'box', name:'おうちケア定期便', price:2980, cadence:'毎月', color:'#25a08c' },
 };
 const STRETCH = {
-  s_neck_side:{ emoji:'🦒', name:'首のよこ倒しストレッチ' }, s_chest:{ emoji:'🫁', name:'胸ひらきストレッチ' },
-  s_scapula:{ emoji:'🦋', name:'肩甲骨はがし体操' }, s_waist:{ emoji:'🌀', name:'寝たまま腰ひねり' },
-  s_hip:{ emoji:'🍑', name:'おしり伸ばしストレッチ' }, s_478:{ emoji:'🌬️', name:'4-7-8 リラックス呼吸法' },
-  s_calf:{ emoji:'🦵', name:'ふくらはぎポンプ体操' }, s_morning:{ emoji:'🌻', name:'朝のせのびリセット体操' },
+  s_neck_side:{ icon:'stretch', name:'首のよこ倒しストレッチ' }, s_chest:{ icon:'wind', name:'胸ひらきストレッチ' },
+  s_scapula:{ icon:'stretch', name:'肩甲骨はがし体操' }, s_waist:{ icon:'refresh', name:'寝たまま腰ひねり' },
+  s_hip:{ icon:'stretch', name:'おしり伸ばしストレッチ' }, s_478:{ icon:'wind', name:'4-7-8 リラックス呼吸法' },
+  s_calf:{ icon:'walk', name:'ふくらはぎポンプ体操' }, s_morning:{ icon:'sun', name:'朝のせのびリセット体操' },
 };
 const ASSESS_CATS = [
-  { id:'sleep', name:'ねむりの状態', emoji:'🌙' }, { id:'rhythm', name:'生活リズム', emoji:'⏰' },
-  { id:'stress', name:'こころ', emoji:'💭' }, { id:'body', name:'からだ', emoji:'💪' }, { id:'env', name:'環境・習慣', emoji:'🛏️' },
+  { id:'sleep', name:'ねむりの状態', icon:'moon' }, { id:'rhythm', name:'生活リズム', icon:'clock' },
+  { id:'stress', name:'こころ', icon:'bulb' }, { id:'body', name:'からだ', icon:'stretch' }, { id:'env', name:'環境・習慣', icon:'bed' },
 ];
 
 /* ============================================================
@@ -302,7 +395,7 @@ function mkCustomer(o) {
       orders: (o.orders || []).map(x => ({ id: uid(), date: addDays(todayStr(), -x.d), items: x.items, delivery: 'store',
         total: x.items.reduce((a, it) => a + (PRODUCT[it.id]?.price || 0) * it.qty, 0) })),
       cart: [], visitFlow: null, xpLog: [],
-      quickChecks: o.quick ? [{ id: uid(), date: addDays(todayStr(), -o.quick.d), score: o.quick.score, label: o.quick.label, emoji: o.quick.emoji || '💭', text: '' }] : [],
+      quickChecks: o.quick ? [{ id: uid(), date: addDays(todayStr(), -o.quick.d), score: o.quick.score, label: o.quick.label, icon: 'bulb', text: '' }] : [],
       assessments: o.assess ? [{ id: uid(), date: addDays(todayStr(), -o.assess.d), total: o.assess.total, cats: o.assess.cats, worst: o.assess.worst, bestId: o.assess.best, level: o.assess.level }] : [],
       slidesDone: [], subscription: o.sub ? { planId: o.sub, since: addDays(todayStr(), -(o.subSince || 30)) } : null,
       prescription: o.presc ? { items: o.presc.items, date: addDays(todayStr(), -o.presc.d), until: addDays(todayStr(), 14 - o.presc.d) } : null,
@@ -365,7 +458,7 @@ function seedAdmin() {
       quick:{ d:2, score:52, label:'おやすみスイッチ型' } }),
 
     mkCustomer({ name:'高橋 大輔', kana:'たかはし だいすけ', phone:'090-7777-8888', memberNo:'SL-0988', goal:'posture', since:120, xp:410,
-      memo:'⚠️ 前回来店から4週間・記録も停止。LINEフォロー済み(返信待ち)。',
+      memo:'【要フォロー】前回来店から4週間・記録も停止。LINEフォロー済み(返信待ち)。',
       logs: makeLogs(28, (n, i) => i > 10 ? ['23:40', '06:20', 3, 1, 2, ['exercise']] : null),
       visits: [{ d:60 }, { d:42 }, { d:28 }],
       tickets: [mkTicket('施術回数券（10回）', 10, 7, 100, 12, [60, 42, 28])],
@@ -460,7 +553,7 @@ function followUpsOf(c) {
    UI部品・チャート
    ============================================================ */
 function Btn({ children, kind = 'primary', onClick, disabled, full, small, className = '' }) {
-  const base = `btn-press inline-flex items-center justify-center gap-1.5 font-bold rounded-xl transition
+  const base = `btn-press inline-flex items-center justify-center gap-1.5 font-bold rounded-[9px] transition
     ${small ? 'px-3 py-1.5 text-[12px]' : 'px-4 py-2.5 text-[13px]'} ${full ? 'w-full' : ''} ${disabled ? 'opacity-40 pointer-events-none' : ''}`;
   const kinds = {
     primary: 'bg-cream-100 text-night-900',
@@ -480,14 +573,15 @@ function Badge({ children, tone = 'gray' }) {
     green: 'bg-cpara/15 text-[#4cc2ae] border border-cpara/40', red: 'bg-csymp/15 text-[#f0968c] border border-csymp/40',
     blue: 'bg-cperi/15 text-[#a5b4f5] border border-cperi/40',
   };
-  return <span className={`inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full ${tones[tone]}`}>{children}</span>;
+  return <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${tones[tone]}`}>{children}</span>;
 }
-function SectionTitle({ icon, title, sub, right }) {
+function SectionTitle({ icon, en, title, sub, right }) {
   return (
     <div className="flex items-end justify-between mb-2.5">
       <div>
-        <h2 className="text-[14px] font-black text-cream-50">{icon && <span className="mr-1">{icon}</span>}{title}</h2>
-        {sub && <p className="text-[10.5px] text-night-200 mt-0.5">{sub}</p>}
+        {en && <p className="kicker mb-1">{en}</p>}
+        <h2 className="text-[13.5px] font-bold tracking-wide text-cream-50 flex items-center gap-1.5">{icon && <Icon name={icon} size={14} className="text-moon-300" />}{title}</h2>
+        {sub && <p className="text-[10.5px] text-night-200 mt-1">{sub}</p>}
       </div>
       {right}
     </div>
@@ -502,21 +596,21 @@ function Modal({ open, onClose, children, wide }) {
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center p-4" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60" style={{ backdropFilter:'blur(3px)' }} />
-      <div className={`relative w-full ${wide ? 'max-w-2xl' : 'max-w-md'} max-h-[86vh] overflow-y-auto bg-night-700 border border-night-400/40 rounded-2xl p-5 anim-slide-up`} onClick={e => e.stopPropagation()}>
+      <div className={`relative w-full ${wide ? 'max-w-2xl' : 'max-w-md'} max-h-[86vh] overflow-y-auto bg-night-700 border border-night-400/40 rounded-[10px] p-5 anim-slide-up`} onClick={e => e.stopPropagation()}>
         {children}
       </div>
     </div>
   );
 }
-function EmptyState({ emoji = '💤', text, sub }) {
-  return <div className="py-7 text-center"><div className="text-3xl mb-2">{emoji}</div>
+function EmptyState({ icon = 'zzz', text, sub }) {
+  return <div className="py-7 text-center"><div className="mb-2.5 flex justify-center"><Icon name={icon} size={28} className="text-night-300" strokeWidth={1.4} /></div>
     <p className="text-[12.5px] font-bold text-night-100">{text}</p>{sub && <p className="text-[10.5px] text-night-200 mt-1">{sub}</p>}</div>;
 }
 function StatTile({ label, value, unit, sub, accent, onClick }) {
   return (
     <button onClick={onClick} className={`card p-3.5 text-left w-full ${onClick ? 'btn-press' : 'cursor-default'}`}>
       <p className="text-[10px] font-bold text-night-200">{label}</p>
-      <p className="text-[24px] leading-tight font-black mt-1" style={{ color: accent || '#eef1f8' }}>{value}<span className="text-[11px] font-bold text-night-200 ml-0.5">{unit}</span></p>
+      <p className="text-[24px] leading-tight font-bold mt-1" style={{ color: accent || '#eef1f8' }}>{value}<span className="text-[11px] font-bold text-night-200 ml-0.5">{unit}</span></p>
       {sub && <p className="text-[9.5px] text-night-300 mt-0.5">{sub}</p>}
     </button>
   );
@@ -578,15 +672,15 @@ function BalanceGauge({ value }) {
   return (
     <div>
       <div className="flex justify-between text-[10.5px] font-bold mb-1">
-        <span style={{ color:'#f0968c' }}>⚡ 交感神経</span>
-        <span style={{ color:'#4cc2ae' }}>🌙 副交感神経</span>
+        <span className="inline-flex items-center gap-1" style={{ color:'#f0968c' }}><Icon name="bolt" size={11} />交感神経</span>
+        <span className="inline-flex items-center gap-1" style={{ color:'#4cc2ae' }}><Icon name="moon" size={11} />副交感神経</span>
       </div>
       <div className="relative h-3.5 rounded-full" style={{ background: C.night500 }}>
         <div className="absolute top-0 bottom-0 w-[2px] left-1/2 -translate-x-1/2" style={{ background:'#3c4763' }} />
         <div className="absolute top-0 bottom-0 rounded-full" style={pct >= 0 ? { left:'50%', width: half + '%', background: C.para } : { right:'50%', width: half + '%', background: C.symp }} />
         <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full border-[3px]" style={{ left:(50 + pct / 2) + '%', background:'#eef1f8', borderColor: pct >= 0 ? C.para : C.symp }} />
       </div>
-      <p className="text-[11px] font-black text-cream-50 mt-1">{info.short}<span className="text-night-200 font-medium text-[10px] ml-1.5">{info.label}</span></p>
+      <p className="text-[11px] font-bold text-cream-50 mt-1">{info.short}<span className="text-night-200 font-medium text-[10px] ml-1.5">{info.label}</span></p>
     </div>
   );
 }
@@ -604,11 +698,11 @@ function PinGate({ pin, onOk }) {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6" style={{ background:'linear-gradient(180deg,#0d1424,#131c31)' }}>
       <Soupy size={110} animate />
-      <h1 className="text-[18px] font-black text-cream-50 mt-2">SLEEPY 管理コンソール</h1>
+      <h1 className="text-[18px] font-bold text-cream-50 mt-2">SLEEPY 管理コンソール</h1>
       <p className="text-[11px] text-night-200 mt-1">スタッフ用PINを入力してください（デモ: 1234）</p>
       <input value={v} onChange={e => setV(e.target.value.replace(/\D/g, '').slice(0, 4))} onKeyDown={e => e.key === 'Enter' && submit()}
         type="password" inputMode="numeric" placeholder="••••" autoFocus
-        className="mt-5 w-40 text-center tracking-[.5em] bg-night-600 border border-night-400/50 rounded-2xl px-4 py-3 text-[22px] font-black text-cream-50 outline-none focus:border-moon-400" />
+        className="mt-5 w-40 text-center tracking-[.5em] bg-night-600 border border-night-400/50 rounded-[10px] px-4 py-3 text-[22px] font-bold text-cream-50 outline-none focus:border-moon-400" />
       <div className="mt-4 w-40"><Btn kind="moon" full onClick={submit}>ひらく</Btn></div>
       <a href="index.html" className="mt-8 text-[11px] font-bold text-night-300 underline">← 顧客向けアプリへもどる</a>
     </div>
@@ -630,7 +724,7 @@ function Dashboard() {
 
   return (
     <div className="anim-slide-up">
-      <SectionTitle icon="📊" title="ダッシュボード" sub={fmtJP(t)} />
+      <SectionTitle icon="chart" en="Dashboard" title="ダッシュボード" sub={fmtJP(t)} />
       <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5">
         <StatTile label="顧客数" value={cs.length} unit="名" onClick={() => nav('customers')} />
         <StatTile label="本日の来店" value={todayVisits.length} unit="件" accent={todayVisits.length ? '#f6d97e' : undefined} />
@@ -642,14 +736,14 @@ function Dashboard() {
 
       <div className="grid md:grid-cols-2 gap-3 mt-4">
         <div>
-          <SectionTitle icon="🔔" title="要フォローのお客さま" sub="来店間隔・記録停止・回数券から自動抽出" />
+          <SectionTitle icon="bell" en="Follow Up" title="要フォローのお客さま" sub="来店間隔・記録停止・回数券から自動抽出" />
           <div className="flex flex-col gap-1.5">
-            {follows.length === 0 && <div className="card"><EmptyState emoji="🎉" text="フォローが必要なお客さまはいません" /></div>}
+            {follows.length === 0 && <div className="card"><EmptyState icon="sparkle" text="フォローが必要なお客さまはいません" /></div>}
             {follows.slice(0, 6).map(({ c, f }) => (
               <button key={c.id} onClick={() => nav('customer', c.id)} className="btn-press card px-3.5 py-2.5 flex items-center gap-3 text-left">
-                <span className="w-9 h-9 rounded-full bg-night-500 flex items-center justify-center text-[13px] font-black text-cream-50 shrink-0">{c.data.profile.name.slice(0, 1)}</span>
+                <span className="w-9 h-9 rounded-full bg-night-500 flex items-center justify-center text-[13px] font-bold text-cream-50 shrink-0">{c.data.profile.name.slice(0, 1)}</span>
                 <span className="flex-1 min-w-0">
-                  <span className="block text-[12.5px] font-black text-cream-50 truncate">{c.data.profile.name}</span>
+                  <span className="block text-[12.5px] font-bold text-cream-50 truncate">{c.data.profile.name}</span>
                   <span className="flex flex-wrap gap-1 mt-1">{f.slice(0, 2).map((x, i) => <Badge key={i} tone="red">{x.label}</Badge>)}</span>
                 </span>
                 <span className="text-night-300">→</span>
@@ -658,28 +752,28 @@ function Dashboard() {
           </div>
         </div>
         <div>
-          <SectionTitle icon="🏥" title="本日の来店" />
+          <SectionTitle icon="building" en="Today" title="本日の来店" />
           <div className="flex flex-col gap-1.5 mb-4">
-            {todayVisits.length === 0 && <div className="card"><EmptyState emoji="🌙" text="本日の来店記録はまだありません" sub="お客さまがチェックインすると表示されます" /></div>}
+            {todayVisits.length === 0 && <div className="card"><EmptyState icon="moon" text="本日の来店記録はまだありません" sub="お客さまがチェックインすると表示されます" /></div>}
             {todayVisits.map(({ c, v }, i) => (
               <button key={i} onClick={() => nav('customer', c.id)} className="btn-press card px-3.5 py-2.5 flex items-center gap-3 text-left">
-                <span className="text-[15px]">🏥</span>
-                <span className="flex-1 text-[12.5px] font-black text-cream-50">{c.data.profile.name}</span>
+                <Icon name="building" size={15} className="text-moon-300" />
+                <span className="flex-1 text-[12.5px] font-bold text-cream-50">{c.data.profile.name}</span>
                 <span className="text-[10.5px] text-night-200">{v.menu}</span>
               </button>
             ))}
           </div>
-          <SectionTitle icon="📄" title="最近の改善レポート" />
+          <SectionTitle icon="file" en="Recent Reports" title="最近の改善レポート" />
           <div className="flex flex-col gap-1.5">
             {recentKarte.length === 0 && <div className="card"><EmptyState text="レポートはまだありません" /></div>}
             {recentKarte.map(({ c, v }, i) => (
               <button key={i} onClick={() => nav('customer', c.id)} className="btn-press card px-3.5 py-2.5 flex items-center gap-3 text-left">
-                <span className="text-[15px]">📄</span>
+                <Icon name="file" size={15} className="text-moon-300" />
                 <span className="flex-1 min-w-0">
-                  <span className="block text-[12px] font-black text-cream-50 truncate">{c.data.profile.name}<span className="text-night-300 font-medium text-[10px] ml-1.5">{fmtMDW(v.date)}</span></span>
+                  <span className="block text-[12px] font-bold text-cream-50 truncate">{c.data.profile.name}<span className="text-night-300 font-medium text-[10px] ml-1.5">{fmtMDW(v.date)}</span></span>
                 </span>
                 {v.karte.before && v.karte.after && (
-                  <span className="text-[11.5px] font-black"><span className="text-night-200">{v.karte.before.score}</span>
+                  <span className="text-[11.5px] font-bold"><span className="text-night-200">{v.karte.before.score}</span>
                     <span className="text-night-300 mx-1">→</span><span style={{ color:'#4cc2ae' }}>{v.karte.after.score}点</span></span>
                 )}
               </button>
@@ -710,10 +804,10 @@ function Customers() {
 
   return (
     <div className="anim-slide-up">
-      <SectionTitle icon="👥" title="顧客" sub={`${admin.customers.length}名`} />
+      <SectionTitle icon="users" en="Customers" title="顧客" sub={`${admin.customers.length}名`} />
       <div className="flex flex-col sm:flex-row gap-2 mb-3">
-        <input value={q} onChange={e => setQ(e.target.value)} placeholder="🔍 名前・かな・会員番号でさがす"
-          className="flex-1 bg-night-600 border border-night-400/50 rounded-xl px-3.5 py-2.5 text-[13px] font-bold text-cream-50 outline-none focus:border-moon-400" />
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder="名前・かな・会員番号でさがす"
+          className="flex-1 bg-night-600 border border-night-400/50 rounded-[9px] px-3.5 py-2.5 text-[13px] font-bold text-cream-50 outline-none focus:border-moon-400" />
         <div className="flex gap-1.5">
           <Chip active={sort === 'visit'} onClick={() => setSort('visit')}>来店が新しい順</Chip>
           <Chip active={sort === 'score'} onClick={() => setSort('score')}>スコアが低い順</Chip>
@@ -730,20 +824,20 @@ function Customers() {
           const sub = c.data.subscription && SUB_PLAN[c.data.subscription.planId];
           return (
             <button key={c.id} onClick={() => nav('customer', c.id)} className="btn-press card px-3.5 py-3 flex items-center gap-3 text-left">
-              <span className="w-10 h-10 rounded-full bg-night-500 flex items-center justify-center text-[14px] font-black text-cream-50 shrink-0">{c.data.profile.name.slice(0, 1)}</span>
+              <span className="w-10 h-10 rounded-full bg-night-500 flex items-center justify-center text-[14px] font-bold text-cream-50 shrink-0">{c.data.profile.name.slice(0, 1)}</span>
               <span className="flex-1 min-w-0">
                 <span className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[13px] font-black text-cream-50">{c.data.profile.name}</span>
+                  <span className="text-[13px] font-bold text-cream-50">{c.data.profile.name}</span>
                   <Badge tone="gold">Lv.{level}</Badge>
-                  {sub && <Badge tone="blue">{sub.emoji} {sub.name}</Badge>}
+                  {sub && <Badge tone="blue"><Icon name={sub.icon} size={10} />{sub.name}</Badge>}
                   {follows.slice(0, 1).map((f, i) => <Badge key={i} tone="red">{f.label}</Badge>)}
                 </span>
                 <span className="block text-[10px] text-night-300 mt-0.5">
-                  {c.data.profile.memberNo} ・ 最終来店 {lv ? `${fmtMD(lv)}（${daysBetween(lv, todayStr())}日前）` : 'なし'} ・ 🎫のこり{ticketRemainingOf(c)}回
+                  {c.data.profile.memberNo} ・ 最終来店 {lv ? `${fmtMD(lv)}（${daysBetween(lv, todayStr())}日前）` : 'なし'} ・ のこり{ticketRemainingOf(c)}回
                 </span>
               </span>
               <span className="hidden sm:block"><Spark data={spark} /></span>
-              <span className="w-11 text-right text-[15px] font-black" style={{ color: avgScoreOf(c) != null ? scoreLabel(avgScoreOf(c)).color : C.night300 }}>
+              <span className="w-11 text-right text-[15px] font-bold" style={{ color: avgScoreOf(c) != null ? scoreLabel(avgScoreOf(c)).color : C.night300 }}>
                 {avgScoreOf(c) ?? '−'}
               </span>
             </button>
@@ -758,27 +852,27 @@ function Customers() {
 function KarteModalBody({ karte }) {
   return (
     <div>
-      <h3 className="text-[15px] font-black text-cream-50 mb-1">📄 改善レポート</h3>
+      <h3 className="text-[15px] font-bold text-cream-50 mb-1 flex items-center gap-1.5"><Icon name="file" size={15} className="text-moon-300" />改善レポート</h3>
       <p className="text-[10.5px] text-night-200 mb-3">{karte.date ? fmtJP(karte.date) : ''}</p>
       {karte.before && karte.after && (
         <div className="card-deep p-3 mb-2.5 flex items-center justify-center gap-4">
-          <span className="text-[10px] font-black text-[#f0968c]">BEFORE {karte.before.score}点</span>
-          <span className="text-moon-300 font-black">→</span>
-          <span className="text-[13px] font-black text-[#4cc2ae]">AFTER {karte.after.score}点</span>
+          <span className="text-[10px] font-bold text-[#f0968c]">BEFORE {karte.before.score}点</span>
+          <span className="text-moon-300 font-bold">→</span>
+          <span className="text-[13px] font-bold text-[#4cc2ae]">AFTER {karte.after.score}点</span>
         </div>
       )}
       {karte.feelBefore && karte.feelAfter && (
         <div className="card-deep p-3 mb-2.5 text-[11.5px] text-night-100">
-          🖐️ 体感 かるさ {karte.feelBefore.light}→{karte.feelAfter.light} ／ 首肩 {karte.feelBefore.neck}→{karte.feelAfter.neck} ／ 気分 {karte.feelBefore.mood}→{karte.feelAfter.mood}
+          体感 かるさ {karte.feelBefore.light}→{karte.feelAfter.light} ／ 首肩 {karte.feelBefore.neck}→{karte.feelAfter.neck} ／ 気分 {karte.feelBefore.mood}→{karte.feelAfter.mood}
         </div>
       )}
       {(karte.comments || []).map((t, i) => <p key={i} className="text-[11.5px] text-night-100 leading-relaxed mb-1.5">・{t}</p>)}
       {(karte.prescribed || []).length > 0 && (
         <div className="mt-2">
-          <p className="text-[10.5px] font-black text-night-200 mb-1">💊 処方</p>
+          <p className="text-[10.5px] font-bold text-night-200 mb-1 flex items-center gap-1"><Icon name="pill" size={11} className="text-moon-300" />処方</p>
           <div className="flex flex-wrap gap-1">{karte.prescribed.map(id => {
             const s = STRETCH[id], p = PRODUCT[id];
-            return <Badge key={id} tone="gold">{s ? `${s.emoji} ${s.name}` : p ? `${p.emoji} ${p.name}` : id}</Badge>;
+            return <Badge key={id} tone="gold">{s ? s.name : p ? p.name : id}</Badge>;
           })}</div>
         </div>
       )}
@@ -857,26 +951,26 @@ function CustomerDetail({ id }) {
       <button onClick={() => nav('customers')} className="btn-press text-[11.5px] font-bold text-night-200 mb-2">← 顧客一覧へ</button>
       <div className="card p-4">
         <div className="flex flex-wrap items-center gap-3">
-          <span className="w-12 h-12 rounded-full bg-night-500 flex items-center justify-center text-[17px] font-black text-cream-50">{c.data.profile.name.slice(0, 1)}</span>
+          <span className="w-12 h-12 rounded-full bg-night-500 flex items-center justify-center text-[17px] font-bold text-cream-50">{c.data.profile.name.slice(0, 1)}</span>
           <div className="flex-1 min-w-[180px]">
-            <p className="text-[16px] font-black text-cream-50">{c.data.profile.name} <span className="text-[10.5px] text-night-300 font-medium">{c.kana}</span></p>
+            <p className="text-[16px] font-bold text-cream-50">{c.data.profile.name} <span className="text-[10.5px] text-night-300 font-medium">{c.kana}</span></p>
             <p className="text-[10.5px] text-night-200 mt-0.5">{c.data.profile.memberNo} ・ {c.phone || '電話未登録'} ・ お悩み：{GOALS[c.data.profile.goal] || '−'}</p>
             <div className="flex flex-wrap gap-1 mt-1.5">
-              <Badge tone="gold">🐑 Lv.{level.lv} {stageTitle(level.lv)}</Badge>
-              {sub && <Badge tone="blue">{sub.emoji} {sub.name}</Badge>}
+              <Badge tone="gold">Lv.{level.lv} {stageTitle(level.lv)}</Badge>
+              {sub && <Badge tone="blue"><Icon name={sub.icon} size={10} />{sub.name}</Badge>}
               {follows.map((f, i) => <Badge key={i} tone="red">{f.label}</Badge>)}
             </div>
           </div>
           <div className="text-right">
             <p className="text-[10px] text-night-300">最終来店</p>
-            <p className="text-[13px] font-black text-cream-50">{lvDate ? `${fmtMDW(lvDate)}` : 'なし'}</p>
+            <p className="text-[13px] font-bold text-cream-50">{lvDate ? `${fmtMDW(lvDate)}` : 'なし'}</p>
             {lvDate && <p className="text-[10px] text-night-300">{daysBetween(lvDate, todayStr())}日前</p>}
           </div>
         </div>
         <div className="mt-3">
-          <p className="text-[10.5px] font-black text-night-200 mb-1">スタッフメモ（お客さまには見えません）</p>
+          <p className="text-[10.5px] font-bold text-night-200 mb-1">スタッフメモ（お客さまには見えません）</p>
           <textarea value={memo} onChange={e => setMemo(e.target.value)} rows={2}
-            className="w-full bg-night-600 border border-night-400/50 rounded-xl px-3 py-2 text-[12px] font-bold text-cream-50 outline-none focus:border-moon-400" />
+            className="w-full bg-night-600 border border-night-400/50 rounded-[9px] px-3 py-2 text-[12px] font-bold text-cream-50 outline-none focus:border-moon-400" />
           <div className="mt-1.5"><Btn small onClick={saveMemo}>メモを保存</Btn></div>
         </div>
       </div>
@@ -896,31 +990,31 @@ function CustomerDetail({ id }) {
           {last && <div className="card p-4 mt-3"><BalanceGauge value={last.balance ?? calcAutonomic(last)} /></div>}
           {presc && presc.until >= todayStr() && (
             <div className="card p-3.5 mt-3">
-              <p className="text-[11px] font-black text-cream-50 mb-1.5">💊 現在のホームケア処方 <span className="text-[9.5px] text-night-300 font-medium">{fmtMD(presc.until)}まで</span></p>
+              <p className="text-[11px] font-bold text-cream-50 mb-1.5 flex items-center gap-1"><Icon name="pill" size={12} className="text-moon-300" />現在のホームケア処方 <span className="text-[9.5px] text-night-300 font-medium">{fmtMD(presc.until)}まで</span></p>
               <div className="flex flex-wrap gap-1">{presc.items.map(pid => {
                 const s = STRETCH[pid], p = PRODUCT[pid];
-                return <Badge key={pid} tone="gold">{s ? `${s.emoji} ${s.name}` : p ? `${p.emoji} ${p.name}` : pid}</Badge>;
+                return <Badge key={pid} tone="gold">{s ? s.name : p ? p.name : pid}</Badge>;
               })}</div>
             </div>
           )}
           <div className="grid md:grid-cols-2 gap-3 mt-3">
             {assess && (
               <div className="card p-4">
-                <p className="text-[11px] font-black text-cream-50 mb-2">🔬 本診断 <span className="text-night-300 font-medium text-[9.5px]">{fmtMD(assess.date)}・総合{assess.total}点（ランク{assess.level?.rank}）</span></p>
+                <p className="text-[11px] font-bold text-cream-50 mb-2">本診断 <span className="text-night-300 font-medium text-[9.5px]">{fmtMD(assess.date)}・総合{assess.total}点（ランク{assess.level?.rank}）</span></p>
                 {ASSESS_CATS.map(cat => (
                   <div key={cat.id} className="flex items-center gap-2 py-1">
-                    <span className="w-[92px] text-[10.5px] font-bold text-night-100 shrink-0">{cat.emoji} {cat.name}</span>
+                    <span className="w-[100px] text-[10.5px] font-bold text-night-100 shrink-0 inline-flex items-center gap-1"><Icon name={cat.icon} size={11} className="text-moon-300" />{cat.name}</span>
                     <div className="flex-1"><ProgressBar pct={assess.cats[cat.id]} color={assess.cats[cat.id] >= 70 ? C.peri : C.serious} h={7} /></div>
-                    <span className="w-7 text-right text-[11px] font-black text-night-100">{assess.cats[cat.id]}</span>
+                    <span className="w-7 text-right text-[11px] font-bold text-night-100">{assess.cats[cat.id]}</span>
                   </div>
                 ))}
               </div>
             )}
             {quick && (
               <div className="card p-4">
-                <p className="text-[11px] font-black text-cream-50 mb-1.5">📋 かんたん診断 <span className="text-night-300 font-medium text-[9.5px]">{fmtMD(quick.date)}</span></p>
-                <p className="text-[20px] font-black text-moon-300">{quick.score}<span className="text-[10px] text-night-200">点</span>
-                  <span className="text-[12px] text-cream-50 ml-2">{quick.emoji} {quick.label}</span></p>
+                <p className="text-[11px] font-bold text-cream-50 mb-1.5">かんたん診断 <span className="text-night-300 font-medium text-[9.5px]">{fmtMD(quick.date)}</span></p>
+                <p className="text-[20px] font-bold text-moon-300">{quick.score}<span className="text-[10px] text-night-200">点</span>
+                  <span className="text-[12px] text-cream-50 ml-2">{quick.label}</span></p>
               </div>
             )}
           </div>
@@ -931,11 +1025,11 @@ function CustomerDetail({ id }) {
         <div className="mt-3">
           <div className="card p-4"><TrendChart data={logs.slice(-21).map(l => ({ date: l.date, score: l.score }))} /></div>
           <div className="card p-4 mt-3">
-            <p className="text-[11px] font-black text-cream-50 mb-2">この7日間の行動</p>
+            <p className="text-[11px] font-bold text-cream-50 mb-2">この7日間の行動</p>
             {Object.keys(habitCount7).length === 0 && <p className="text-[11px] text-night-300">行動チェックの記録がありません</p>}
             <div className="flex flex-wrap gap-1.5">
               {Object.entries(habitCount7).sort((a, b) => b[1] - a[1]).map(([hid, n]) => (
-                <Badge key={hid} tone={HABIT[hid]?.good ? 'green' : 'red'}>{HABIT[hid]?.icon} {HABIT[hid]?.label} ×{n}</Badge>
+                <Badge key={hid} tone={HABIT[hid]?.good ? 'green' : 'red'}><Icon name={HABIT[hid]?.icon} size={11} />{HABIT[hid]?.label} ×{n}</Badge>
               ))}
             </div>
           </div>
@@ -943,7 +1037,7 @@ function CustomerDetail({ id }) {
             {logs.slice(-10).reverse().map(l => (
               <div key={l.date} className="flex items-center gap-3 px-3 py-2 border-b border-night-500/40 last:border-0">
                 <span className="w-16 text-[10.5px] font-bold text-night-200">{fmtMDW(l.date)}</span>
-                <span className="w-10 text-[13px] font-black" style={{ color: scoreLabel(l.score).color }}>{l.score}<span className="text-[8.5px]">点</span></span>
+                <span className="w-10 text-[13px] font-bold" style={{ color: scoreLabel(l.score).color }}>{l.score}<span className="text-[8.5px]">点</span></span>
                 <div className="flex-1"><ProgressBar pct={l.score} color={scoreLabel(l.score).color} h={5} /></div>
                 <span className="text-[10px] text-night-200 font-bold">{sleepHours(l.bed, l.wake)}h・覚醒{l.awakenings || 0}回</span>
               </div>
@@ -955,29 +1049,29 @@ function CustomerDetail({ id }) {
 
       {tab === 'posture' && (
         <div className="mt-3">
-          {pairs.length === 0 && singles.length === 0 && <div className="card"><EmptyState emoji="📸" text="姿勢分析のデータがありません" /></div>}
+          {pairs.length === 0 && singles.length === 0 && <div className="card"><EmptyState icon="camera" text="姿勢分析のデータがありません" /></div>}
           {pairs.map(({ before, after }, i) => (
             <div key={i} className="card p-4 mb-2.5">
-              <p className="text-[11px] font-black text-cream-50 mb-2">{fmtJP(after.date)} ・ {after.mode === 'front' ? '正面' : '側面'} Before/After</p>
+              <p className="text-[11px] font-bold text-cream-50 mb-2">{fmtJP(after.date)} ・ {after.mode === 'front' ? '正面' : '側面'} Before/After</p>
               <div className="flex items-center justify-center gap-5">
-                <div className="text-center"><p className="text-[9.5px] font-black text-[#f0968c]">BEFORE</p><p className="text-[22px] font-black text-night-100">{before.score}</p></div>
-                <span className="text-moon-300 text-[18px] font-black">→</span>
-                <div className="text-center"><p className="text-[9.5px] font-black text-[#4cc2ae]">AFTER</p><p className="text-[26px] font-black" style={{ color: scoreLabel(after.score).color }}>{after.score}</p></div>
+                <div className="text-center"><p className="text-[9.5px] font-bold text-[#f0968c]">BEFORE</p><p className="text-[22px] font-bold text-night-100">{before.score}</p></div>
+                <span className="text-moon-300 text-[18px] font-bold">→</span>
+                <div className="text-center"><p className="text-[9.5px] font-bold text-[#4cc2ae]">AFTER</p><p className="text-[26px] font-bold" style={{ color: scoreLabel(after.score).color }}>{after.score}</p></div>
                 <Badge tone={after.score > before.score ? 'green' : 'gray'}>{after.score > before.score ? `+${after.score - before.score}点 改善` : '維持'}</Badge>
               </div>
               {after.mode === 'side' && (
-                <p className="text-[10.5px] text-night-200 text-center mt-2">頭部前方角 {before.metrics.fha?.toFixed(1)}° → <span className="font-black text-[#4cc2ae]">{after.metrics.fha?.toFixed(1)}°</span></p>
+                <p className="text-[10.5px] text-night-200 text-center mt-2">頭部前方角 {before.metrics.fha?.toFixed(1)}° → <span className="font-bold text-[#4cc2ae]">{after.metrics.fha?.toFixed(1)}°</span></p>
               )}
               {after.mode === 'front' && (
-                <p className="text-[10.5px] text-night-200 text-center mt-2">肩の傾き {Math.abs(before.metrics.shoulderTilt).toFixed(1)}° → <span className="font-black text-[#4cc2ae]">{Math.abs(after.metrics.shoulderTilt).toFixed(1)}°</span></p>
+                <p className="text-[10.5px] text-night-200 text-center mt-2">肩の傾き {Math.abs(before.metrics.shoulderTilt).toFixed(1)}° → <span className="font-bold text-[#4cc2ae]">{Math.abs(after.metrics.shoulderTilt).toFixed(1)}°</span></p>
               )}
             </div>
           ))}
           {singles.map(p => (
             <div key={p.id} className="card px-4 py-3 mb-1.5 flex items-center gap-3">
-              <span className="text-[15px]">🧍</span>
+              <Icon name="user" size={15} className="text-night-200" />
               <span className="flex-1 text-[11.5px] font-bold text-cream-50">{fmtJP(p.date)} ・ {p.mode === 'front' ? '正面' : '側面'}（{p.phase === 'normal' ? 'ふだん' : p.phase}）</span>
-              <span className="text-[16px] font-black" style={{ color: scoreLabel(p.score).color }}>{p.score}<span className="text-[9px]">点</span></span>
+              <span className="text-[16px] font-bold" style={{ color: scoreLabel(p.score).color }}>{p.score}<span className="text-[9px]">点</span></span>
             </div>
           ))}
         </div>
@@ -985,16 +1079,16 @@ function CustomerDetail({ id }) {
 
       {tab === 'visits' && (
         <div className="mt-3 flex flex-col gap-1.5">
-          {(c.data.visits || []).length === 0 && <div className="card"><EmptyState emoji="🏥" text="来店記録がありません" /></div>}
+          {(c.data.visits || []).length === 0 && <div className="card"><EmptyState icon="building" text="来店記録がありません" /></div>}
           {[...(c.data.visits || [])].reverse().map(v => (
             <div key={v.id} className="card px-4 py-3">
               <div className="flex items-center gap-2.5">
-                <span className="text-[14px]">🏥</span>
-                <span className="text-[12px] font-black text-cream-50">{fmtJP(v.date)}</span>
+                <Icon name="building" size={14} className="text-moon-300" />
+                <span className="text-[12px] font-bold text-cream-50">{fmtJP(v.date)}</span>
                 <span className="text-[10.5px] text-night-200 ml-auto">{v.menu}</span>
               </div>
               {v.note && <p className="text-[10.5px] text-night-200 mt-1 pl-6">{v.note}</p>}
-              {v.karte && <button onClick={() => setKarte(v.karte)} className="btn-press text-[10.5px] font-black text-moon-300 mt-1.5 pl-6">📄 改善レポートを見る</button>}
+              {v.karte && <button onClick={() => setKarte(v.karte)} className="btn-press text-[10.5px] font-bold text-moon-300 mt-1.5 pl-6"><Icon name="file" size={11} className="mr-1 align-[-2px]" />改善レポートを見る</button>}
             </div>
           ))}
         </div>
@@ -1002,7 +1096,7 @@ function CustomerDetail({ id }) {
 
       {tab === 'purchase' && (
         <div className="mt-3">
-          <SectionTitle icon="🎫" title="回数券" />
+          <SectionTitle icon="ticket" en="Tickets" title="回数券" />
           <div className="flex flex-col gap-2 mb-4">
             {(c.data.tickets || []).length === 0 && <div className="card"><EmptyState text="回数券なし" /></div>}
             {(c.data.tickets || []).map(tk => {
@@ -1011,9 +1105,9 @@ function CustomerDetail({ id }) {
               return (
                 <div key={tk.id} className={`card p-3.5 ${expired || left === 0 ? 'opacity-60' : ''}`}>
                   <div className="flex items-center gap-3">
-                    <span className="text-[18px] font-black text-cream-50 w-14">{left}<span className="text-[10px] text-night-200">/{tk.total}</span></span>
+                    <span className="text-[18px] font-bold text-cream-50 w-14">{left}<span className="text-[10px] text-night-200">/{tk.total}</span></span>
                     <div className="flex-1">
-                      <p className="text-[11.5px] font-black text-cream-50">{tk.name}</p>
+                      <p className="text-[11.5px] font-bold text-cream-50">{tk.name}</p>
                       <div className="mt-1"><ProgressBar pct={left / tk.total * 100} color={left && !expired ? C.moon : C.night300} h={6} /></div>
                       <p className="text-[9.5px] text-night-300 mt-0.5">期限 {fmtJP(tk.expiresAt)}{expired && '（期限切れ）'}</p>
                     </div>
@@ -1022,23 +1116,23 @@ function CustomerDetail({ id }) {
               );
             })}
           </div>
-          <SectionTitle icon="📅" title="サブスク" />
+          <SectionTitle icon="calendar" en="Membership" title="サブスク" />
           <div className="card p-3.5 mb-4">
             {sub
-              ? <p className="text-[12px] font-bold text-cream-50">{sub.emoji} {sub.name}（{sub.cadence}・{yen(sub.price)}/月）<span className="text-[10px] text-night-300 ml-1.5">{fmtJP(c.data.subscription.since)}〜</span></p>
+              ? <p className="text-[12px] font-bold text-cream-50">{sub.name}（{sub.cadence}・{yen(sub.price)}/月）<span className="text-[10px] text-night-300 ml-1.5">{fmtJP(c.data.subscription.since)}〜</span></p>
               : <p className="text-[11.5px] text-night-200">未加入 {ticketRemainingOf(c) === 0 && <Badge tone="gold">プラン提案チャンス</Badge>}</p>}
           </div>
-          <SectionTitle icon="🛍️" title="購入履歴" />
+          <SectionTitle icon="bag" en="Purchases" title="購入履歴" />
           <div className="flex flex-col gap-1.5">
             {(c.data.orders || []).length === 0 && <div className="card"><EmptyState text="購入履歴なし" /></div>}
             {[...(c.data.orders || [])].reverse().map(o => (
               <div key={o.id} className="card px-4 py-3 flex items-center gap-3">
-                <span className="text-[14px]">🛍️</span>
+                <Icon name="bag" size={14} className="text-moon-300" />
                 <span className="flex-1 min-w-0">
                   <span className="block text-[11.5px] font-bold text-cream-50 truncate">{o.items.map(it => `${PRODUCT[it.id]?.name || it.id}×${it.qty}`).join('、')}</span>
                   <span className="block text-[9.5px] text-night-300">{fmtJP(o.date)}</span>
                 </span>
-                <span className="text-[13px] font-black text-cream-50">{yen(o.total)}</span>
+                <span className="text-[13px] font-bold text-cream-50">{yen(o.total)}</span>
               </div>
             ))}
           </div>
@@ -1048,17 +1142,17 @@ function CustomerDetail({ id }) {
       {tab === 'io' && (
         <div className="mt-3">
           <div className="card p-4">
-            <p className="text-[12px] font-black text-cream-50 mb-1">📲 顧客アプリからデータを取り込む</p>
+            <p className="text-[12px] font-bold text-cream-50 mb-1 flex items-center gap-1.5"><Icon name="upload" size={13} className="text-moon-300" />顧客アプリからデータを取り込む</p>
             <p className="text-[10.5px] text-night-200 leading-relaxed mb-3">お客さまのアプリ「せってい → データを書き出す」で保存したJSONを取り込むと、このカルテが最新になります。（実運用ではサーバー同期に置き換え）</p>
             <div className="flex flex-wrap gap-2">
-              <Btn kind="moon" onClick={() => fileRef.current && fileRef.current.click()}>📁 JSONファイルを取り込む</Btn>
-              <Btn kind="ghost" onClick={importFromDevice}>📱 この端末の顧客アプリから取り込む</Btn>
+              <Btn kind="moon" onClick={() => fileRef.current && fileRef.current.click()}><Icon name="upload" size={14} className="mr-1" />JSONファイルを取り込む</Btn>
+              <Btn kind="ghost" onClick={importFromDevice}><Icon name="phone" size={14} className="mr-1" />この端末の顧客アプリから取り込む</Btn>
               <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={onImportFile} />
             </div>
           </div>
           <div className="card p-4 mt-3 flex flex-wrap gap-2 items-center">
-            <Btn kind="ghost" onClick={exportJson}>💾 この顧客データを書き出す</Btn>
-            <Btn kind="danger" onClick={() => setConfirmDel(true)}>🗑️ この顧客を削除</Btn>
+            <Btn kind="ghost" onClick={exportJson}><Icon name="download" size={14} className="mr-1" />この顧客データを書き出す</Btn>
+            <Btn kind="danger" onClick={() => setConfirmDel(true)}><Icon name="trash" size={14} className="mr-1" />この顧客を削除</Btn>
           </div>
         </div>
       )}
@@ -1068,8 +1162,8 @@ function CustomerDetail({ id }) {
       </Modal>
       <Modal open={confirmDel} onClose={() => setConfirmDel(false)}>
         <div className="text-center py-2">
-          <span className="text-[36px]">🗑️</span>
-          <h3 className="text-[15px] font-black text-cream-50 mt-2">{c.data.profile.name}さまのデータを削除しますか？</h3>
+          <div className="flex justify-center"><Icon name="trash" size={34} className="text-moon-300" strokeWidth={1.4} /></div>
+          <h3 className="text-[15px] font-bold text-cream-50 mt-2">{c.data.profile.name}さまのデータを削除しますか？</h3>
           <p className="text-[11px] text-night-200 mt-1.5">この操作は元に戻せません。</p>
           <div className="mt-4 flex gap-2">
             <Btn kind="ghost" full onClick={() => setConfirmDel(false)}>やめる</Btn>
@@ -1097,7 +1191,7 @@ function Sales() {
 
   return (
     <div className="anim-slide-up">
-      <SectionTitle icon="💰" title="売上" sub="物販・回数券・サブスク（デモ集計）" />
+      <SectionTitle icon="yen" en="Sales" title="売上" sub="物販・回数券・サブスク（デモ集計）" />
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
         <StatTile label="直近30日の物販・回数券" value={monthTotal.toLocaleString()} unit="円" />
         <StatTile label="直近30日の注文数" value={monthOrders.length} unit="件" />
@@ -1107,31 +1201,31 @@ function Sales() {
 
       <div className="grid md:grid-cols-2 gap-3 mt-4">
         <div>
-          <SectionTitle icon="🏆" title="売れすじランキング" sub="累計販売数" />
+          <SectionTitle icon="star" en="Ranking" title="売れすじランキング" sub="累計販売数" />
           <div className="card p-4">
             {ranking.length === 0 && <EmptyState text="注文がありません" />}
             {ranking.map(([pid, qty], i) => (
               <div key={pid} className="flex items-center gap-2.5 py-1.5">
-                <span className="w-5 text-[12px] font-black text-moon-300">{i + 1}</span>
-                <span className="w-6 text-[14px]">{PRODUCT[pid]?.emoji}</span>
+                <span className="w-5 text-[12px] font-bold text-moon-300">{i + 1}</span>
+                <span className="w-6 text-[14px]"></span>
                 <span className="flex-1 text-[11.5px] font-bold text-cream-50 truncate">{PRODUCT[pid]?.name || pid}</span>
                 <div className="w-24"><ProgressBar pct={qty / maxQty * 100} color={C.peri} h={7} /></div>
-                <span className="w-8 text-right text-[11.5px] font-black text-night-100">{qty}個</span>
+                <span className="w-8 text-right text-[11.5px] font-bold text-night-100">{qty}個</span>
               </div>
             ))}
           </div>
         </div>
         <div>
-          <SectionTitle icon="🧾" title="最近の注文" />
+          <SectionTitle icon="file" en="Orders" title="最近の注文" />
           <div className="flex flex-col gap-1.5">
             {orders.slice(0, 8).map(o => (
               <button key={o.id} onClick={() => nav('customer', o.cid)} className="btn-press card px-3.5 py-2.5 flex items-center gap-3 text-left">
-                <span className="text-[13px]">🛍️</span>
+                <Icon name="bag" size={13} className="text-moon-300" />
                 <span className="flex-1 min-w-0">
-                  <span className="block text-[11.5px] font-black text-cream-50">{o.cname}<span className="text-night-300 font-medium text-[9.5px] ml-1.5">{fmtMD(o.date)}</span></span>
+                  <span className="block text-[11.5px] font-bold text-cream-50">{o.cname}<span className="text-night-300 font-medium text-[9.5px] ml-1.5">{fmtMD(o.date)}</span></span>
                   <span className="block text-[10px] text-night-200 truncate">{o.items.map(it => `${PRODUCT[it.id]?.name || it.id}×${it.qty}`).join('、')}</span>
                 </span>
-                <span className="text-[12.5px] font-black text-cream-50">{yen(o.total)}</span>
+                <span className="text-[12.5px] font-bold text-cream-50">{yen(o.total)}</span>
               </button>
             ))}
             {orders.length === 0 && <div className="card"><EmptyState text="注文がありません" /></div>}
@@ -1149,28 +1243,28 @@ function AdminSettings() {
   const [confirm, setConfirm] = useState(false);
   return (
     <div className="anim-slide-up max-w-lg">
-      <SectionTitle icon="⚙️" title="設定" />
+      <SectionTitle icon="gear" en="Settings" title="設定" />
       <div className="card p-4">
-        <p className="text-[11.5px] font-black text-cream-50 mb-1.5">スタッフPIN（4桁）</p>
+        <p className="text-[11.5px] font-bold text-cream-50 mb-1.5">スタッフPIN（4桁）</p>
         <div className="flex gap-2">
           <input value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
-            className="w-28 text-center bg-night-600 border border-night-400/50 rounded-xl px-3 py-2 text-[15px] font-black text-cream-50 outline-none focus:border-moon-400" />
+            className="w-28 text-center bg-night-600 border border-night-400/50 rounded-[9px] px-3 py-2 text-[15px] font-bold text-cream-50 outline-none focus:border-moon-400" />
           <Btn small onClick={() => { if (pin.length !== 4) { toast('4桁で入力してください', 'err'); return; } update(st => { st.pin = pin; }); toast('PINを変更しました'); }}>変更する</Btn>
         </div>
       </div>
       <div className="card p-4 mt-3 flex flex-col gap-2">
-        <Btn kind="ghost" full onClick={() => setConfirm(true)}>🧪 デモ顧客データをリセット</Btn>
-        <a href="index.html" className="btn-press inline-flex items-center justify-center gap-1.5 font-bold rounded-xl px-4 py-2.5 text-[13px] w-full bg-night-600 text-cream-50 border border-night-400/40">📱 顧客向けアプリをひらく</a>
+        <Btn kind="ghost" full onClick={() => setConfirm(true)}><Icon name="refresh" size={14} className="mr-1" />デモ顧客データをリセット</Btn>
+        <a href="index.html" className="btn-press inline-flex items-center justify-center gap-1.5 font-bold rounded-[9px] px-4 py-2.5 text-[13px] w-full bg-night-600 text-cream-50 border border-night-400/40"><Icon name="phone" size={14} className="mr-1" />顧客向けアプリをひらく</a>
       </div>
       <div className="card p-4 mt-3 text-[10.5px] text-night-200 leading-relaxed">
-        <p className="text-[11.5px] font-black text-cream-50 mb-1">このコンソールについて</p>
+        <p className="text-[11.5px] font-bold text-cream-50 mb-1">このコンソールについて</p>
         <p>顧客データはこの端末のブラウザ（localStorage）にのみ保存されるデモ版です。実運用では認証付きのバックエンド（DB/API）に接続し、顧客アプリと自動同期する構成に置き換えてください。</p>
         <p className="mt-2 text-moon-300 font-bold">─ 睡眠から、人生を変える。─ 株式会社SLEEPY</p>
       </div>
       <Modal open={confirm} onClose={() => setConfirm(false)}>
         <div className="text-center py-2">
-          <span className="text-[36px]">🧪</span>
-          <h3 className="text-[15px] font-black text-cream-50 mt-2">デモ顧客データで初期化しますか？</h3>
+          <div className="flex justify-center"><Icon name="refresh" size={34} className="text-moon-300" strokeWidth={1.4} /></div>
+          <h3 className="text-[15px] font-bold text-cream-50 mt-2">デモ顧客データで初期化しますか？</h3>
           <p className="text-[11px] text-night-200 mt-1.5">現在の顧客データ・メモはすべて置き換わります。</p>
           <div className="mt-4 flex gap-2">
             <Btn kind="ghost" full onClick={() => setConfirm(false)}>やめる</Btn>
@@ -1184,10 +1278,10 @@ function AdminSettings() {
 
 /* ---- シェル ---- */
 const NAV = [
-  { id:'dash', icon:'📊', label:'ダッシュボード' },
-  { id:'customers', icon:'👥', label:'顧客' },
-  { id:'sales', icon:'💰', label:'売上' },
-  { id:'settings', icon:'⚙️', label:'設定' },
+  { id:'dash', icon:'chart', label:'ダッシュボード' },
+  { id:'customers', icon:'users', label:'顧客' },
+  { id:'sales', icon:'yen', label:'売上' },
+  { id:'settings', icon:'gear', label:'設定' },
 ];
 
 function App() {
@@ -1209,7 +1303,7 @@ function App() {
         if (target) { target.data = data; target.importedAt = todayStr(); }
         else st.customers.unshift({ id: uid(), kana:'', phone:'', adminMemo:'', importedAt: todayStr(), data });
       });
-      toast(`「${data.profile.name || 'ゲスト'}」さまのデータを取り込みました 📲`);
+      toast(`「${data.profile.name || 'ゲスト'}」さまのデータを取り込みました`);
     } catch (e) { console.warn(e); toast('読み込みに失敗しました', 'err'); }
   }, [update]);
 
@@ -1230,23 +1324,23 @@ function App() {
         {/* サイドバー（PC） */}
         <aside className="hidden md:flex flex-col w-56 shrink-0 border-r border-night-600/70 bg-night-800/60 p-4 sticky top-0 h-screen">
           <div className="flex items-center gap-2.5 px-1">
-            <img src="assets/logo.jpg" alt="" className="w-9 h-9 rounded-xl object-cover border border-night-400/40" onError={e => { e.currentTarget.style.display='none'; }} />
+            <img src="assets/logo.jpg" alt="" className="w-9 h-9 rounded-[9px] object-cover border border-night-400/40" onError={e => { e.currentTarget.style.display='none'; }} />
             <div>
-              <p className="text-[12.5px] font-black text-cream-50 leading-tight">SLEEPY</p>
+              <p className="text-[12.5px] font-bold text-cream-50 leading-tight">SLEEPY</p>
               <p className="text-[9px] text-night-200 font-bold">管理コンソール</p>
             </div>
           </div>
           <nav className="mt-6 flex flex-col gap-1">
             {NAV.map(n => (
               <button key={n.id} onClick={() => nav(n.id)}
-                className={`btn-press flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[12.5px] font-black text-left ${activeNav === n.id ? 'bg-moon-400/15 text-moon-300 border border-moon-400/30' : 'text-night-100 hover:bg-night-600/60'}`}>
-                <span>{n.icon}</span>{n.label}
+                className={`btn-press flex items-center gap-2.5 px-3 py-2.5 rounded-[9px] text-[12.5px] font-bold text-left ${activeNav === n.id ? 'bg-moon-400/15 text-moon-300 border border-moon-400/30' : 'text-night-100 hover:bg-night-600/60'}`}>
+                <Icon name={n.icon} size={16} />{n.label}
               </button>
             ))}
           </nav>
           <div className="mt-auto flex flex-col gap-2">
             <div className="flex justify-center"><Soupy size={80} animate /></div>
-            <Btn kind="outline" small onClick={() => setLocked(true)}>🔒 ロックする</Btn>
+            <Btn kind="outline" small onClick={() => setLocked(true)}><Icon name="lock" size={13} className="mr-1" />ロックする</Btn>
           </div>
         </aside>
 
@@ -1255,8 +1349,8 @@ function App() {
           {/* モバイルヘッダー */}
           <div className="md:hidden sticky top-0 z-40 flex items-center gap-2.5 px-4 py-3 bg-night-900/90 border-b border-night-600/60" style={{ backdropFilter:'blur(10px)' }}>
             <img src="assets/logo.jpg" alt="" className="w-8 h-8 rounded-lg object-cover border border-night-400/40" onError={e => { e.currentTarget.style.display='none'; }} />
-            <p className="flex-1 text-[13px] font-black text-cream-50">SLEEPY 管理コンソール</p>
-            <button onClick={() => setLocked(true)} className="btn-press text-[15px]" aria-label="ロック">🔒</button>
+            <p className="flex-1 text-[13px] font-bold text-cream-50">SLEEPY 管理コンソール</p>
+            <button onClick={() => setLocked(true)} className="btn-press text-cream-100" aria-label="ロック"><Icon name="lock" size={16} /></button>
           </div>
           <div className="p-4 md:p-6 max-w-5xl pb-24 md:pb-8">{screen}</div>
         </main>
@@ -1264,11 +1358,11 @@ function App() {
 
       {/* モバイル下部ナビ */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 px-3 pb-3">
-        <div className="bg-night-800/95 border border-night-500/60 rounded-2xl flex justify-around px-1 py-2" style={{ backdropFilter:'blur(12px)' }}>
+        <div className="bg-night-800/95 border border-night-500/60 rounded-[10px] flex justify-around px-1 py-2" style={{ backdropFilter:'blur(12px)' }}>
           {NAV.map(n => (
             <button key={n.id} onClick={() => nav(n.id)} className="btn-press flex flex-col items-center gap-0.5 px-3 py-1">
-              <span className={`text-[17px] ${activeNav === n.id ? '' : 'grayscale opacity-60'}`}>{n.icon}</span>
-              <span className={`text-[9px] font-black ${activeNav === n.id ? 'text-moon-300' : 'text-night-300'}`}>{n.label}</span>
+              <Icon name={n.icon} size={18} className={activeNav === n.id ? 'text-moon-300' : 'text-night-300'} />
+              <span className={`text-[9px] font-bold ${activeNav === n.id ? 'text-moon-300' : 'text-night-300'}`}>{n.label}</span>
             </button>
           ))}
         </div>
@@ -1283,10 +1377,10 @@ class ErrorBoundary extends React.Component {
   render() {
     if (this.state.err) return (
       <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center">
-        <span className="text-[40px]">😴💦</span>
-        <p className="text-[14px] font-black text-cream-50 mt-3">エラーがおきました</p>
+        <Icon name="moon" size={38} className="text-night-300" strokeWidth={1.3} />
+        <p className="text-[14px] font-bold text-cream-50 mt-3">エラーがおきました</p>
         <p className="text-[10px] text-night-300 mt-2 break-all">{String(this.state.err)}</p>
-        <button className="mt-4 px-5 py-2.5 rounded-xl bg-cream-100 text-night-900 font-black text-[13px]" onClick={() => location.reload()}>再読み込み</button>
+        <button className="mt-4 px-5 py-2.5 rounded-[9px] bg-cream-100 text-night-900 font-bold text-[13px]" onClick={() => location.reload()}>再読み込み</button>
       </div>
     );
     return this.props.children;
