@@ -616,6 +616,25 @@ function StatTile({ label, value, unit, sub, accent, onClick }) {
   );
 }
 
+function ScoreRing({ score, size = 108, sub = '姿勢スコア' }) {
+  const sw = 9, r = (size - sw) / 2, cx = size / 2;
+  const circ = 2 * Math.PI * r;
+  const col = scoreLabel(score).color;
+  return (
+    <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90">
+        <circle cx={cx} cy={cx} r={r} fill="none" stroke={C.night500} strokeWidth={sw} />
+        <circle cx={cx} cy={cx} r={r} fill="none" stroke={col} strokeWidth={sw} strokeLinecap="round"
+          strokeDasharray={`${circ * score / 100} ${circ}`} />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-[24px] leading-none font-bold text-cream-50 tabular">{score}<span className="text-[10px] font-bold text-night-200">点</span></span>
+        <span className="text-[8.5px] text-night-200 mt-1">{sub}</span>
+      </div>
+    </div>
+  );
+}
+
 function useTip() {
   const [tip, setTip] = useState(null);
   const show = (xPct, yPct, main, sub) => setTip(t => (t && t.main === main && t.sub === sub) ? null : { xPct, yPct, main, sub });
@@ -1049,6 +1068,7 @@ function CustomerDetail({ id }) {
 
       {tab === 'posture' && (
         <div className="mt-3">
+          <div className="mb-3"><Btn kind="moon" onClick={() => nav('capture', c.id)}><Icon name="camera" size={15} className="mr-1" />姿勢分析を撮影する（お客さまアプリへ自動配信）</Btn></div>
           {pairs.length === 0 && singles.length === 0 && <div className="card"><EmptyState icon="camera" text="姿勢分析のデータがありません" /></div>}
           {pairs.map(({ before, after }, i) => (
             <div key={i} className="card p-4 mb-2.5">
@@ -1171,6 +1191,393 @@ function CustomerDetail({ id }) {
           </div>
         </div>
       </Modal>
+    </div>
+  );
+}
+
+
+/* ============================================================
+   姿勢分析（撮影・分析はスタッフ側で実施 → 顧客アプリへ配信）
+   ============================================================ */
+const MP_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/';
+const LM = { nose:0, lEye:2, rEye:5, lEar:7, rEar:8, lSh:11, rSh:12, lHip:23, rHip:24, lKnee:25, rKnee:26, lAnkle:27, rAnkle:28 };
+
+async function ensurePose() {
+  if (window.Pose) return;
+  await loadScriptOnce(MP_CDN + 'pose.js');
+}
+
+let __pose = null, __poseBusy = Promise.resolve();
+function detectPose(canvas) {
+  // 直列化して1枚ずつ解析
+  const run = async () => {
+    await ensurePose();
+    if (!__pose) {
+      __pose = new window.Pose({ locateFile: f => MP_CDN + f });
+      __pose.setOptions({ modelComplexity: 1, smoothLandmarks: false, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+    }
+    return new Promise((resolve, reject) => {
+      __pose.onResults(r => resolve(r));
+      __pose.send({ image: canvas }).catch(reject);
+    });
+  };
+  __poseBusy = __poseBusy.then(run, run);
+  return __poseBusy;
+}
+
+const deg = (rad) => rad * 180 / Math.PI;
+// 正面: 頭の傾き / 肩の高さ差 / 骨盤の傾き / 重心の左右
+function frontMetrics(px) {
+  const tilt = (a, b) => deg(Math.atan2(px[b].y - px[a].y, Math.abs(px[b].x - px[a].x) || 1));
+  const headTilt = tilt(LM.lEar, LM.rEar);
+  const shoulderTilt = tilt(LM.lSh, LM.rSh);
+  const pelvisTilt = tilt(LM.lHip, LM.rHip);
+  const shW = Math.abs(px[LM.rSh].x - px[LM.lSh].x) || 1;
+  const midSh = (px[LM.lSh].x + px[LM.rSh].x) / 2;
+  const midAn = (px[LM.lAnkle].x + px[LM.rAnkle].x) / 2;
+  const centerShift = (midSh - midAn) / shW * 100;
+  return { headTilt, shoulderTilt, pelvisTilt, centerShift };
+}
+function frontScore(m) {
+  const s1 = Math.max(0, 25 - Math.abs(m.headTilt) * 3.2);
+  const s2 = Math.max(0, 25 - Math.abs(m.shoulderTilt) * 4.5);
+  const s3 = Math.max(0, 25 - Math.abs(m.pelvisTilt) * 4.5);
+  const s4 = Math.max(0, 25 - Math.abs(m.centerShift) * 1.1);
+  return Math.round(s1 + s2 + s3 + s4);
+}
+
+// 側面: 頭部前方角(FHA) / 体幹の前後傾 / 下肢ライン
+function sideMetrics(px, side) {
+  const ear = side === 'l' ? px[LM.lEar] : px[LM.rEar];
+  const sh = side === 'l' ? px[LM.lSh] : px[LM.rSh];
+  const hip = side === 'l' ? px[LM.lHip] : px[LM.rHip];
+  const ankle = side === 'l' ? px[LM.lAnkle] : px[LM.rAnkle];
+  const fha = deg(Math.atan2(Math.abs(ear.x - sh.x), Math.abs(sh.y - ear.y) || 1));
+  const trunkLean = deg(Math.atan2(Math.abs(sh.x - hip.x), Math.abs(hip.y - sh.y) || 1));
+  const kneeLean = deg(Math.atan2(Math.abs(hip.x - ankle.x), Math.abs(ankle.y - hip.y) || 1));
+  return { fha, trunkLean, kneeLean };
+}
+function sideScore(m) {
+  const s1 = Math.max(0, 40 - Math.max(0, m.fha - 5) * 2.4);
+  const s2 = Math.max(0, 30 - Math.max(0, m.trunkLean - 2) * 3.2);
+  const s3 = Math.max(0, 30 - Math.max(0, m.kneeLean - 2) * 3.2);
+  return Math.round(s1 + s2 + s3);
+}
+function metricRows(mode, m) {
+  if (mode === 'front') return [
+    { label: '頭のかたむき', value: `${Math.abs(m.headTilt).toFixed(1)}°`, ok: Math.abs(m.headTilt) < 2.5, warn: Math.abs(m.headTilt) < 5,
+      note: '首の左右バランス。かたむきは首すじの緊張のサイン。' },
+    { label: '肩の高さの差', value: `${Math.abs(m.shoulderTilt).toFixed(1)}°`, ok: Math.abs(m.shoulderTilt) < 2.5, warn: Math.abs(m.shoulderTilt) < 5,
+      note: '肩の左右差は肩甲骨まわりのこわばりと関係します。' },
+    { label: '骨盤のかたむき', value: `${Math.abs(m.pelvisTilt).toFixed(1)}°`, ok: Math.abs(m.pelvisTilt) < 2.5, warn: Math.abs(m.pelvisTilt) < 5,
+      note: '骨盤の傾きは腰の負担・寝返りのしやすさに影響。' },
+    { label: '重心の左右ズレ', value: `${Math.abs(m.centerShift).toFixed(0)}%`, ok: Math.abs(m.centerShift) < 8, warn: Math.abs(m.centerShift) < 16,
+      note: '立ち姿勢の安定感。ズレが大きいと片側に負担が集中。' },
+  ];
+  return [
+    { label: '頭部前方角（スマホ首）', value: `${m.fha.toFixed(1)}°`, ok: m.fha < 8, warn: m.fha < 15,
+      note: '頭が前に出るほど首の負担が増え、呼吸が浅くなります。' },
+    { label: '体幹の前後傾', value: `${m.trunkLean.toFixed(1)}°`, ok: m.trunkLean < 4, warn: m.trunkLean < 8,
+      note: '猫背・反り腰の目安。胸がひらくと呼吸がラクに。' },
+    { label: 'からだの軸ライン', value: `${m.kneeLean.toFixed(1)}°`, ok: m.kneeLean < 4, warn: m.kneeLean < 8,
+      note: '耳〜肩〜骨盤〜くるぶしが一直線に近いほど理想的。' },
+  ];
+}
+
+// デモ用ランドマーク（33点のうち必要点のみ配置）
+function demoLandmarks(mode, phase) {
+  const l = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, visibility: 0 }));
+  const set = (i, x, y) => { l[i] = { x, y, visibility: 1 }; };
+  if (mode === 'front') {
+    const t = phase === 'after' ? 0.006 : 0.024; // 傾き量
+    set(LM.nose, 0.50, 0.13);
+    set(LM.lEar, 0.445, 0.15 + t); set(LM.rEar, 0.555, 0.15 - t);
+    set(LM.lSh, 0.36, 0.30 + t * 2.2); set(LM.rSh, 0.64, 0.30 - t * 2.2);
+    set(LM.lHip, 0.425, 0.55 + t * 1.4); set(LM.rHip, 0.575, 0.55 - t * 1.4);
+    set(LM.lKnee, 0.435, 0.72); set(LM.rKnee, 0.565, 0.72);
+    set(LM.lAnkle, 0.445 + (phase === 'after' ? 0 : 0.02), 0.885); set(LM.rAnkle, 0.565 + (phase === 'after' ? 0 : 0.02), 0.885);
+  } else {
+    const fw = phase === 'after' ? 0.022 : 0.075; // 頭の前方変位
+    set(LM.nose, 0.56 + fw, 0.125);
+    set(LM.rEar, 0.52 + fw, 0.145); set(LM.lEar, 0.52 + fw, 0.148);
+    set(LM.rSh, 0.52, 0.30); set(LM.lSh, 0.52, 0.303);
+    set(LM.rHip, 0.50, 0.55); set(LM.lHip, 0.50, 0.553);
+    set(LM.rKnee, 0.515, 0.72); set(LM.lKnee, 0.515, 0.723);
+    set(LM.rAnkle, 0.505, 0.885); set(LM.lAnkle, 0.505, 0.888);
+  }
+  return l;
+}
+
+function drawDemoBody(ctx, w, h) {
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, '#1a2440'); g.addColorStop(1, '#131c31');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = 'rgba(91,107,148,.35)';
+  ctx.beginPath(); ctx.arc(w * 0.52, h * 0.15, w * 0.09, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(w * 0.51, h * 0.45, w * 0.15, h * 0.24, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(w * 0.51, h * 0.78, w * 0.10, h * 0.16, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(199,206,222,.5)'; ctx.font = `bold ${Math.round(w * 0.045)}px sans-serif`;
+  ctx.textAlign = 'center'; ctx.fillText('デモ画像', w / 2, h * 0.97);
+}
+
+// 骨格オーバーレイ描画
+function drawOverlay(ctx, w, h, lms, mode) {
+  const P = i => ({ x: lms[i].x * w, y: lms[i].y * h, v: lms[i].visibility });
+  const seg = (a, b) => {
+    const pa = P(a), pb = P(b);
+    if (pa.v < 0.4 || pb.v < 0.4) return;
+    ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke();
+  };
+  // ガイド（正中線）
+  ctx.save();
+  ctx.strokeStyle = 'rgba(250,243,227,.4)'; ctx.setLineDash([6, 6]); ctx.lineWidth = 1.5;
+  const gx = mode === 'side' ? (P(LM.rAnkle).v > 0.4 ? P(LM.rAnkle).x : w / 2) : w / 2;
+  ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, h); ctx.stroke();
+  ctx.restore();
+  // 骨格
+  ctx.strokeStyle = 'rgba(250,243,227,.9)'; ctx.lineWidth = Math.max(2, w * 0.008); ctx.lineCap = 'round';
+  seg(LM.lEar, LM.rEar); seg(LM.lSh, LM.rSh); seg(LM.lHip, LM.rHip);
+  seg(LM.lSh, LM.lHip); seg(LM.rSh, LM.rHip);
+  seg(LM.lHip, LM.lKnee); seg(LM.lKnee, LM.lAnkle);
+  seg(LM.rHip, LM.rKnee); seg(LM.rKnee, LM.rAnkle);
+  if (mode === 'side') { seg(LM.rEar, LM.rSh); seg(LM.lEar, LM.lSh); }
+  // ポイント
+  [LM.lEar, LM.rEar, LM.lSh, LM.rSh, LM.lHip, LM.rHip, LM.lKnee, LM.rKnee, LM.lAnkle, LM.rAnkle].forEach(i => {
+    const p = P(i); if (p.v < 0.4) return;
+    ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(3.5, w * 0.012), 0, Math.PI * 2);
+    ctx.fillStyle = '#f6d97e'; ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = '#131c31'; ctx.stroke();
+  });
+}
+
+
+// 同一端末の顧客アプリ(sleepy_app_v1)へ結果を即時反映（実運用ではサーバー同期に置換）
+function mirrorPostureToCustomerApp(memberNo, rec) {
+  try {
+    const raw = localStorage.getItem('sleepy_app_v1');
+    if (!raw) return false;
+    const st = JSON.parse(raw);
+    if (!st || !st.profile || st.profile.memberNo !== memberNo) return false;
+    st.posture = st.posture || [];
+    st.posture.push(rec);
+    if (st.visitFlow) {
+      if (rec.phase === 'before') { st.visitFlow.beforeId = rec.id; st.visitFlow.step = Math.max(st.visitFlow.step || 0, 6); }
+      if (rec.phase === 'after') { st.visitFlow.afterId = rec.id; st.visitFlow.step = Math.max(st.visitFlow.step || 0, 7); }
+    }
+    localStorage.setItem('sleepy_app_v1', JSON.stringify(st));
+    return true;
+  } catch (e) { console.warn(e); return false; }
+}
+
+function PostureCaptureScreen({ id }) {
+  const { admin, update, nav } = useApp();
+  const c = admin.customers.find(x => x.id === id);
+  const [mode, setMode] = useState('side');
+  const [phase, setPhase] = useState('before');
+  const [view, setView] = useState('menu'); // menu | camera | busy | result
+  const [result, setResult] = useState(null);
+  const [camErr, setCamErr] = useState(null);
+  const [countdown, setCountdown] = useState(0);
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const fileRef = useRef(null);
+  const stopCam = () => { if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; } };
+  useEffect(() => () => stopCam(), []);
+  if (!c) return <EmptyState text="お客さまが見つかりません" />;
+
+  const startCamera = async () => {
+    setCamErr(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 720 }, height: { ideal: 960 } }, audio: false });
+      streamRef.current = stream;
+      setView('camera');
+      setTimeout(() => { if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play().catch(() => {}); } }, 50);
+    } catch (e) { console.warn(e); setCamErr('カメラを起動できません。写真アップロードをご利用ください。'); }
+  };
+  const finishAnalyze = (canvas, lms) => {
+    const w = canvas.width, h = canvas.height;
+    const px = lms.map(p => ({ x: p.x * w, y: p.y * h, visibility: p.visibility }));
+    let metrics, score;
+    if (mode === 'front') { metrics = frontMetrics(px); score = frontScore(metrics); }
+    else {
+      const vis = i => lms[i].visibility || 0;
+      const side = (vis(LM.lEar) + vis(LM.lSh) + vis(LM.lHip)) > (vis(LM.rEar) + vis(LM.rSh) + vis(LM.rHip)) ? 'l' : 'r';
+      metrics = sideMetrics(px, side); score = sideScore(metrics);
+    }
+    drawOverlay(canvas.getContext('2d'), w, h, lms, mode);
+    const tw = 300, th = Math.round(h / w * 300);
+    const tc = document.createElement('canvas'); tc.width = tw; tc.height = th;
+    tc.getContext('2d').drawImage(canvas, 0, 0, tw, th);
+    setResult({ url: canvas.toDataURL('image/jpeg', 0.82), thumb: tc.toDataURL('image/jpeg', 0.55), metrics, score, mode });
+    setView('result');
+  };
+  const analyzeCanvas = async (canvas, demo) => {
+    setView('busy');
+    try {
+      if (demo) { finishAnalyze(canvas, demoLandmarks(mode, phase === 'after' ? 'after' : 'before')); return; }
+      const res = await detectPose(canvas);
+      if (!res || !res.poseLandmarks) { toast('からだを検出できませんでした。全身が写るように撮影してください', 'err'); setView('menu'); return; }
+      finishAnalyze(canvas, res.poseLandmarks);
+    } catch (e) { console.warn(e); toast('分析エンジンの読み込みに失敗しました（要ネット接続）。デモをご利用ください', 'err'); setView('menu'); }
+  };
+  const capture = () => {
+    setCountdown(3);
+    const iv = setInterval(() => {
+      setCountdown(cd => {
+        if (cd > 1) return cd - 1;
+        clearInterval(iv);
+        const v = videoRef.current;
+        if (v && v.videoWidth) {
+          const scale = Math.min(1, 720 / v.videoHeight);
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.round(v.videoWidth * scale); canvas.height = Math.round(v.videoHeight * scale);
+          canvas.getContext('2d').drawImage(v, 0, 0, canvas.width, canvas.height);
+          stopCam();
+          analyzeCanvas(canvas, false);
+        }
+        return 0;
+      });
+    }, 1000);
+  };
+  const onFile = (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, 900 / img.height);
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale); canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(img.src);
+      analyzeCanvas(canvas, false);
+    };
+    img.src = URL.createObjectURL(f);
+    e.target.value = '';
+  };
+  const runDemo = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 360; canvas.height = 480;
+    drawDemoBody(canvas.getContext('2d'), 360, 480);
+    analyzeCanvas(canvas, true);
+  };
+  const saveResult = () => {
+    const rec = { id: uid(), date: todayStr(), mode: result.mode, phase, score: result.score, metrics: result.metrics, img: result.thumb };
+    if (phase === 'after') {
+      const beforeRec = [...(c.data.posture || [])].reverse().find(p => p.date === todayStr() && p.mode === result.mode && p.phase === 'before');
+      if (beforeRec) { rec.pairId = beforeRec.pairId || uid(); }
+    }
+    update(st => {
+      const x = st.customers.find(y => y.id === id);
+      if (!x) return;
+      x.data.posture = x.data.posture || [];
+      if (rec.pairId) {
+        const b = [...x.data.posture].reverse().find(p => p.date === todayStr() && p.mode === rec.mode && p.phase === 'before');
+        if (b && !b.pairId) b.pairId = rec.pairId;
+      }
+      x.data.posture.push(rec);
+      const withImg = x.data.posture.filter(p => p.img);
+      if (withImg.length > 12) withImg.slice(0, withImg.length - 12).forEach(p => { p.img = null; });
+    });
+    const mirrored = mirrorPostureToCustomerApp(c.data.profile.memberNo, rec);
+    toast(mirrored ? '保存し、お客さまのアプリへ配信しました' : '保存しました（お客さまアプリへは同期時に反映）');
+    nav('customer', id);
+  };
+
+  return (
+    <div className="anim-slide-up max-w-2xl">
+      <button onClick={() => { stopCam(); nav('customer', id); }} className="btn-press text-[11.5px] font-bold text-night-200 mb-2">← {c.data.profile.name}さまのカルテへ</button>
+      <SectionTitle icon="camera" en="Posture Analysis" title={`姿勢分析の撮影 — ${c.data.profile.name}さま`} sub="結果は保存と同時にお客さまのアプリに届きます" />
+
+      {view === 'menu' && (
+        <div>
+          <p className="text-[11.5px] font-bold text-night-100 mb-1.5">① 分析する向き</p>
+          <div className="grid grid-cols-2 gap-2">
+            {[{ id:'side', icon:'walk', t:'側面（よこ向き）', d:'スマホ首・猫背チェック' }, { id:'front', icon:'user', t:'正面', d:'肩・骨盤の左右差チェック' }].map(o => (
+              <button key={o.id} onClick={() => setMode(o.id)} className={`btn-press card p-3.5 text-left ${mode === o.id ? 'hairline-gold border' : ''}`} style={mode === o.id ? { borderColor:'rgba(217,180,92,.5)' } : null}>
+                <Icon name={o.icon} size={20} className="text-moon-300" />
+                <span className="block text-[12.5px] font-bold text-cream-50 mt-1">{o.t}</span>
+                <span className="block text-[10px] text-night-200 mt-0.5">{o.d}</span>
+              </button>
+            ))}
+          </div>
+          <p className="text-[11.5px] font-bold text-night-100 mt-4 mb-1.5">② タイミング</p>
+          <div className="flex gap-1.5">
+            {[{ id:'before', t:'施術前' }, { id:'after', t:'施術後' }, { id:'normal', t:'ふだん' }].map(o => (
+              <Chip key={o.id} active={phase === o.id} onClick={() => setPhase(o.id)}>{o.t}</Chip>
+            ))}
+          </div>
+          <p className="text-[11.5px] font-bold text-night-100 mt-4 mb-1.5">③ 撮影方法</p>
+          <div className="flex flex-col gap-2 max-w-md">
+            <Btn kind="moon" full onClick={startCamera}><Icon name="camera" size={15} className="mr-1" />カメラで撮影</Btn>
+            <Btn kind="ghost" full onClick={() => fileRef.current && fileRef.current.click()}><Icon name="upload" size={15} className="mr-1" />写真をえらぶ</Btn>
+            <Btn kind="outline" full onClick={runDemo}><Icon name="sparkle" size={15} className="mr-1" />デモでためす（カメラ不要）</Btn>
+            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFile} />
+          </div>
+          {camErr && <p className="text-[11px] text-[#f0968c] font-bold mt-2">{camErr}</p>}
+          <p className="text-[10px] text-night-300 mt-2 leading-relaxed">撮影のコツ：2〜3m離れて全身を。側面はからだの真横から。画像はこの端末にのみ保存されます。</p>
+        </div>
+      )}
+
+      {view === 'camera' && (
+        <div>
+          <div className="relative rounded-[13px] overflow-hidden border border-night-400/50 bg-black max-w-md">
+            <video ref={videoRef} playsInline muted className="w-full max-h-[58vh] object-cover" />
+            <div className="absolute inset-0 pointer-events-none">
+              <div className="absolute left-1/2 top-0 bottom-0 w-[2px] -translate-x-1/2 opacity-50" style={{ background:'repeating-linear-gradient(#faf3e3 0 8px, transparent 8px 16px)' }} />
+              <div className="absolute left-[12%] right-[12%] top-[6%] bottom-[4%] border-2 border-dashed border-cream-100/50 rounded-[36px]" />
+            </div>
+            {countdown > 0 && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                <span key={countdown} className="text-[80px] font-bold text-cream-50 anim-pop">{countdown}</span>
+              </div>
+            )}
+          </div>
+          <div className="mt-3 flex gap-2 max-w-md">
+            <Btn kind="ghost" onClick={() => { stopCam(); setView('menu'); }}>もどる</Btn>
+            <Btn kind="moon" full onClick={capture} disabled={countdown > 0}><Icon name="camera" size={15} className="mr-1" />3秒タイマーで撮影</Btn>
+          </div>
+        </div>
+      )}
+
+      {view === 'busy' && (
+        <div className="py-14 text-center">
+          <Soupy size={110} className="mx-auto" animate />
+          <p className="text-[13px] font-bold text-cream-50 mt-3">骨格を分析中…</p>
+          <p className="text-[11px] text-night-200 mt-1">初回はモデルの読み込みに少し時間がかかります</p>
+        </div>
+      )}
+
+      {view === 'result' && result && (
+        <div className="max-w-xl">
+          <div className="flex gap-3">
+            <img src={result.url} alt="分析画像" className="w-[46%] rounded-[10px] border border-night-400/50 object-cover" />
+            <div className="flex-1 flex flex-col items-center justify-center">
+              <ScoreRing score={result.score} size={116} />
+              <span className={`mt-2 text-[10px] px-2 py-1 rounded-[6px] font-bold ${phase === 'before' ? 'bg-csymp/20 text-[#f0968c]' : phase === 'after' ? 'bg-cpara/20 text-[#4cc2ae]' : 'bg-night-500 text-night-100'}`}>
+                {result.mode === 'front' ? '正面' : '側面'}・{phase === 'before' ? '施術前' : phase === 'after' ? '施術後' : 'ふだん'}
+              </span>
+            </div>
+          </div>
+          <div className="card p-4 mt-3">
+            {metricRows(result.mode, result.metrics).map((r, i) => (
+              <div key={i} className="flex items-center gap-2 py-1.5 border-b border-night-500/40 last:border-0">
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: r.ok ? C.good : r.warn ? C.warning : C.serious }} />
+                <span className="flex-1 text-[11.5px] font-bold text-cream-50">{r.label}</span>
+                <span className="text-[12.5px] font-bold" style={{ color: r.ok ? '#4cc2ae' : r.warn ? C.warning : '#f0968c' }}>{r.value}</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 flex flex-col gap-2">
+            <div className="flex gap-1.5 justify-center">
+              {[{ id:'before', t:'施術前として保存' }, { id:'after', t:'施術後として保存' }, { id:'normal', t:'ふだんの記録' }].map(o => (
+                <Chip key={o.id} active={phase === o.id} onClick={() => setPhase(o.id)}>{o.t}</Chip>
+              ))}
+            </div>
+            <Btn kind="moon" full onClick={saveResult}><Icon name="download" size={15} className="mr-1" />保存してお客さまへ配信</Btn>
+            <Btn kind="ghost" full onClick={() => { setResult(null); setView('menu'); }}>とりなおす</Btn>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1313,6 +1720,7 @@ function App() {
   if (route.name === 'dash') screen = <Dashboard />;
   else if (route.name === 'customers') screen = <Customers />;
   else if (route.name === 'customer') screen = <CustomerDetail id={route.id} />;
+  else if (route.name === 'capture') screen = <PostureCaptureScreen id={route.id} />;
   else if (route.name === 'sales') screen = <Sales />;
   else if (route.name === 'settings') screen = <AdminSettings />;
 
