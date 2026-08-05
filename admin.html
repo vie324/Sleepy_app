@@ -270,17 +270,15 @@ const stageTitle = (lv) => [...STAGES].reverse().find(s => lv >= s.min).title;
 
 // 商品・プラン・ストレッチの表示名（顧客データ参照用の要約マスタ）
 const PRODUCT = {
-  p_pillow:{ icon:'bed', name:'SLEEPY オリジナル快眠まくら', price:12800 },
-  p_bath:{ icon:'bath', name:'重炭酸 入浴タブレット 30錠', price:2480 },
-  p_tea:{ icon:'cup', name:'おやすみハーブティー 30包', price:1780 },
-  p_glasses:{ icon:'glasses', name:'ブルーライトカットメガネ', price:4980 },
-  p_pole:{ icon:'stretch', name:'ストレッチポール', price:8800 },
-  p_mask:{ icon:'moon', name:'シルクアイマスク', price:2980 },
-  p_spray:{ icon:'droplet', name:'ラベンダー ピロースプレー', price:1980 },
-  p_gaba:{ icon:'pill', name:'GABA配合 おやすみサプリ 30日分', price:3980 },
+  p_nmn:{ icon:'pill', name:'JIBUN NMN＋36,000', price:27540 },
+  p_saturn:{ icon:'droplet', name:'SATURN｜ミスト状化粧水', price:6820 },
+  p_saturn_set:{ icon:'gift', name:'ミスト状化粧水SATURN 5個＋1', price:34100 },
+  p_salt250:{ icon:'cup', name:'LUNA CORE SALT 250g', price:2160 },
+  p_salt750:{ icon:'cup', name:'LUNA CORE SALT 750g', price:6426 },
+  p_salt1500:{ icon:'cup', name:'LUNA CORE SALT 1500g', price:11000 },
   t_5:{ icon:'ticket', name:'施術回数券（5回）', price:27500, ticket:{ count:5, months:6 } },
   t_10:{ icon:'ticket', name:'施術回数券（10回）', price:52000, ticket:{ count:10, months:12 } },
-};
+}
 const SUB_PLAN = {
   sub_light:{ icon:'moon', name:'整えライト会員', price:10800, cadence:'月1回', color:'#6d82ec' },
   sub_std:{ icon:'sparkle', name:'整えスタンダード会員', price:19800, cadence:'月2回', color:'#eec25a' },
@@ -426,7 +424,7 @@ function seedAdmin() {
         { d:2, mode:'side', phase:'before', score:66, metrics:{ fha:15.2, trunkLean:5.1, kneeLean:2.6 }, pairId:'p2' },
         { d:2, mode:'side', phase:'after', score:88, metrics:{ fha:7.4, trunkLean:2.2, kneeLean:1.3 }, pairId:'p2' },
       ],
-      orders: [{ d:14, items:[{ id:'p_tea', qty:1 }] }, { d:2, items:[{ id:'p_pillow', qty:1 }] }],
+      orders: [{ d:14, items:[{ id:'p_salt250', qty:1 }] }, { d:2, items:[{ id:'p_nmn', qty:1 }] }],
       sub:'sub_std', subSince:42, presc:{ d:2, items:['s_neck_side','s_478'] },
       stretch: [{ d:1, id:'s_478' }, { d:1, id:'s_neck_side' }, { d:2, id:'s_478' }],
       quick:{ d:70, score:48, label:'おやすみスイッチ型' },
@@ -445,8 +443,8 @@ function seedAdmin() {
         { d:6, mode:'side', phase:'before', score:58, metrics:{ fha:19.5, trunkLean:6.8, kneeLean:3.4 }, pairId:'p3' },
         { d:6, mode:'side', phase:'after', score:76, metrics:{ fha:11.2, trunkLean:3.9, kneeLean:2.1 }, pairId:'p3' },
       ],
-      orders: [{ d:18, items:[{ id:'p_glasses', qty:1 }] }],
-      presc:{ d:6, items:['s_478','p_tea'] },
+      orders: [{ d:18, items:[{ id:'p_saturn', qty:1 }] }],
+      presc:{ d:6, items:['s_478','p_salt250'] },
       quick:{ d:55, score:38, label:'リズム乱れ型' },
       assess:{ d:35, total:58, cats:{ sleep:52, rhythm:48, stress:60, body:64, env:66 }, worst:['rhythm','sleep'], best:'env', level:{ rank:'C', label:'お疲れサインが出ています' } } }),
 
@@ -472,7 +470,7 @@ function seedAdmin() {
       logs: makeLogs(21, (n) => ['23:10', '06:30', n % 4 === 0 ? 4 : 5, 0, 3, ['sun','bath','exercise']]),
       visits: [{ d:50 }, { d:30 }, { d:10, note:'状態よし。維持フェーズ。' }],
       tickets: [mkTicket('施術回数券（10回）', 10, 8, 88, 12, [50, 30, 10])],
-      orders: [{ d:30, items:[{ id:'p_bath', qty:2 }] }, { d:10, items:[{ id:'p_spray', qty:1 }, { id:'p_tea', qty:1 }] }],
+      orders: [{ d:30, items:[{ id:'p_salt750', qty:2 }] }, { d:10, items:[{ id:'p_salt250', qty:1 }, { id:'p_saturn', qty:1 }] }],
       sub:'sub_care', subSince:60,
       stretch: [{ d:1, id:'s_morning' }, { d:2, id:'s_morning' }, { d:3, id:'s_morning' }],
       assess:{ d:50, total:84, cats:{ sleep:88, rhythm:86, stress:78, body:80, env:88 }, worst:[], best:'sleep', level:{ rank:'A', label:'とてもよく整っています' } } }),
@@ -485,7 +483,7 @@ function seedAdmin() {
       }),
       visits: [{ d:20 }, { d:8 }],
       tickets: [mkTicket('施術回数券（5回）', 5, 2, 45, 6, [20, 8])],
-      orders: [{ d:8, items:[{ id:'p_tea', qty:2 }] }],
+      orders: [{ d:8, items:[{ id:'p_salt750', qty:1 }] }],
       presc:{ d:8, items:['s_478','s_waist'] },
       assess:{ d:20, total:61, cats:{ sleep:55, rhythm:66, stress:64, body:62, env:58 }, worst:['sleep','env'], best:'rhythm', level:{ rank:'C', label:'お疲れサインが出ています' } } }),
 
@@ -501,14 +499,14 @@ function seedAdmin() {
         { d:7, mode:'front', phase:'after', score:81, metrics:{ headTilt:1.2, shoulderTilt:1.9, pelvisTilt:1.6, centerShift:5 }, pairId:'p5' },
       ],
       stretch: [{ d:1, id:'s_scapula' }, { d:2, id:'s_scapula' }, { d:2, id:'s_chest' }, { d:3, id:'s_scapula' }],
-      presc:{ d:7, items:['s_scapula','s_chest','p_pole'] } }),
+      presc:{ d:7, items:['s_scapula','s_chest'] } }),
 
     mkCustomer({ name:'山本 のりこ', kana:'やまもと のりこ', phone:'070-2323-4545', memberNo:'SL-0975', goal:'fallAsleep', since:150, xp:520,
       memo:'回数券を使い切り。満足度は高い→10回券 or スタンダード会員をご案内したい。',
       logs: makeLogs(10, (n) => ['23:25', '06:45', 4, 1, 2, ['bath', n % 2 ? 'sun' : '']].map((v, i) => i === 5 ? v.filter(Boolean) : v)),
       visits: [{ d:70 }, { d:45 }, { d:25 }, { d:12 }],
       tickets: [mkTicket('施術回数券（10回）', 10, 10, 140, 12, [70, 45, 25, 12])],
-      orders: [{ d:45, items:[{ id:'p_mask', qty:1 }] }],
+      orders: [{ d:45, items:[{ id:'p_salt250', qty:1 }] }],
       assess:{ d:70, total:70, cats:{ sleep:72, rhythm:74, stress:60, body:68, env:76 }, worst:['stress'], best:'env', level:{ rank:'B', label:'おおむね良好・のびしろあり' } } }),
   ];
   return { version: 1, pin: '1234', customers, createdAt: todayStr() };
@@ -728,6 +726,82 @@ function PinGate({ pin, onOk }) {
   );
 }
 
+/* ---- カウンセリング受信箱（LINE→カウンセリング表の受信）---- */
+function CounselInbox() {
+  const { admin, update, nav } = useApp();
+  const [items, setItems] = useState(readCounselingInbox);
+  const [open, setOpen] = useState(null);
+  const refresh = () => setItems(readCounselingInbox());
+  const entry = items.find(x => x.id === open);
+
+  const saveToKarte = (e) => {
+    const target = admin.customers.find(c => c.data.profile.memberNo === e.memberNo)
+      || admin.customers.find(c => c.data.profile.name === e.name);
+    if (target) {
+      update(st => {
+        const x = st.customers.find(y => y.id === target.id);
+        if (x) { x.data.counselings = x.data.counselings || []; x.data.counselings.push({ id: e.id, date: e.submittedAt, answers: e.answers, staff: e.staff, customer: e.customer }); }
+      });
+      toast(`${e.name}さまのカルテに保存しました`);
+    } else {
+      update(st => {
+        st.customers.unshift({ id: uid(), kana:'', phone:'', adminMemo:'カウンセリング表から新規作成', importedAt: todayStr(),
+          data: { version:1, onboarded:true, profile:{ name: e.name, goal:'fallAsleep', createdAt: e.submittedAt, memberNo: e.memberNo || ('SL-' + Math.floor(1000 + Math.random() * 9000)) },
+            soupy:{ xp:0, wearing:[], petDate:'', petCount:0 }, sleepLogs:{}, visits:[], tickets:[], posture:[], stretchLog:[], learnRead:[], quizDone:{}, orders:[], cart:[], visitFlow:null, xpLog:[],
+            quickChecks:[], assessments:[], slidesDone:[], subscription:null, prescription:null,
+            counselings:[{ id: e.id, date: e.submittedAt, answers: e.answers, staff: e.staff, customer: e.customer }] } });
+      });
+      toast('新規のお客さまとしてカルテを作成しました');
+    }
+    const rest = items.filter(x => x.id !== e.id);
+    writeCounselingInbox(rest);
+    setItems(rest);
+    setOpen(null);
+  };
+  const remove = (e) => {
+    const rest = items.filter(x => x.id !== e.id);
+    writeCounselingInbox(rest);
+    setItems(rest);
+    setOpen(null);
+  };
+
+  return (
+    <div className="mt-4">
+      <SectionTitle icon="file" en="Counseling Inbox" title="新着カウンセリング表" sub="LINE→来店前入力の受信（AI分析つき）"
+        right={<Btn small kind="ghost" onClick={refresh}><Icon name="refresh" size={12} className="mr-1" />更新</Btn>} />
+      {items.length === 0
+        ? <div className="card"><EmptyState icon="file" text="新着のカウンセリング表はありません" sub="お客さまが送信するとここに届きます（更新ボタンで再読込）" /></div>
+        : <div className="flex flex-col gap-1.5">
+            {[...items].reverse().map(e => (
+              <button key={e.id} onClick={() => setOpen(e.id)} className="btn-press card px-3.5 py-2.5 flex items-center gap-3 text-left">
+                <IconTile name="file" size={36} iconSize={16} tone="gold" />
+                <span className="flex-1 min-w-0">
+                  <span className="block text-[12.5px] font-bold text-cream-50">{e.name}<span className="text-[9.5px] text-night-300 font-medium ml-1.5">{fmtMDW(e.submittedAt)}</span></span>
+                  <span className="block text-[10px] text-night-200 truncate">{(e.staff?.issues || []).slice(0, 2).map(x => x.label).join('・') || 'お悩み入力あり'}</span>
+                </span>
+                <Badge tone="gold">未対応</Badge>
+              </button>
+            ))}
+          </div>}
+
+      <Modal open={!!entry} onClose={() => setOpen(null)} wide>
+        {entry && (
+          <div>
+            <p className="kicker">Counseling Sheet</p>
+            <h3 className="text-[16px] font-bold text-cream-50 mt-0.5">{entry.name} さま <span className="text-[10.5px] text-night-300 font-medium">{fmtJP(entry.submittedAt)} 受信{entry.memberNo ? ` ・ ${entry.memberNo}` : ''}</span></h3>
+            <div className="card-deep p-3.5 mt-3"><CounselSheetView answers={entry.answers} /></div>
+            <CounselAiPanel staff={entry.staff} />
+            <div className="mt-4 flex gap-2">
+              <Btn kind="ghost" onClick={() => remove(entry)}><Icon name="trash" size={13} className="mr-1" />削除</Btn>
+              <Btn kind="moon" full onClick={() => saveToKarte(entry)}><Icon name="download" size={14} className="mr-1" />顧客カルテに保存</Btn>
+            </div>
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
 /* ---- ダッシュボード ---- */
 function Dashboard() {
   const { admin, nav } = useApp();
@@ -752,6 +826,9 @@ function Dashboard() {
         <StatTile label="サブスク月額(MRR)" value={mrr.toLocaleString()} unit="円" onClick={() => nav('sales')} />
         <StatTile label="要フォロー" value={follows.length} unit="名" accent={follows.length ? '#f0968c' : '#4cc2ae'} />
       </div>
+
+      {/* カウンセリング受信箱 */}
+      <CounselInbox />
 
       <div className="grid md:grid-cols-2 gap-3 mt-4">
         <div>
@@ -899,6 +976,49 @@ function KarteModalBody({ karte }) {
   );
 }
 
+const RESV_MENUS = ['初回体験（90分）', '睡眠整体 60分', '睡眠整体 90分', '姿勢分析＋施術 75分', 'ヘッドケア 30分'];
+function ReservationEditor({ c }) {
+  const { update } = useApp();
+  const r = c.data.nextReservation || null;
+  const [date, setDate] = useState(r ? r.date : '');
+  const [time, setTime] = useState(r ? r.time : '10:00');
+  const [menu, setMenu] = useState(r ? r.menu : RESV_MENUS[1]);
+  useEffect(() => { const n = c.data.nextReservation; setDate(n ? n.date : ''); setTime(n ? n.time : '10:00'); setMenu(n ? n.menu : RESV_MENUS[1]); }, [c.id]);
+  const save = () => {
+    if (!date) { toast('日付をえらんでください', 'err'); return; }
+    const resv = { date, time, menu, setAt: todayStr() };
+    update(st => { const x = st.customers.find(y => y.id === c.id); if (x) x.data.nextReservation = resv; });
+    mirrorCustomerApp(c.data.profile.memberNo, st => { st.nextReservation = resv; });
+    toast('次回予約を保存し、お客さまアプリへ反映しました');
+  };
+  const clear = () => {
+    update(st => { const x = st.customers.find(y => y.id === c.id); if (x) x.data.nextReservation = null; });
+    mirrorCustomerApp(c.data.profile.memberNo, st => { st.nextReservation = null; });
+    setDate('');
+    toast('予約を取り消しました');
+  };
+  const inp = "bg-night-600 border border-night-400/50 rounded-[9px] px-3 py-2 text-[12px] font-bold text-cream-50 outline-none focus:border-moon-400";
+  return (
+    <div className="card p-4 mt-3">
+      <p className="text-[11px] font-bold text-cream-50 mb-2 flex items-center gap-1.5"><Icon name="calendar" size={13} className="text-moon-300" />次回のご予約
+        {r && <Badge tone="blue">{fmtMDW(r.date)} {r.time}</Badge>}
+      </p>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <input type="date" value={date} onChange={e => setDate(e.target.value)} className={inp} />
+        <input type="time" value={time} onChange={e => setTime(e.target.value)} className={inp} />
+        <select value={menu} onChange={e => setMenu(e.target.value)} className={inp + " md:col-span-2"}>
+          {RESV_MENUS.map(m => <option key={m} value={m}>{m}</option>)}
+        </select>
+      </div>
+      <div className="mt-2 flex gap-2">
+        <Btn small kind="moon" onClick={save}>保存してお客さまへ反映</Btn>
+        {r && <Btn small kind="ghost" onClick={clear}>取消</Btn>}
+      </div>
+      <p className="text-[9.5px] text-night-300 mt-1.5">保存するとお客さまアプリのホーム・会員証に表示されます（同一端末デモ／実運用はサーバー同期）</p>
+    </div>
+  );
+}
+
 function CustomerDetail({ id }) {
   const { admin, update, nav, importJsonToCustomer } = useApp();
   const c = admin.customers.find(x => x.id === id);
@@ -919,6 +1039,7 @@ function CustomerDetail({ id }) {
   const assess = (c.data.assessments || [])[c.data.assessments.length - 1];
   const quick = (c.data.quickChecks || [])[c.data.quickChecks.length - 1];
   const presc = c.data.prescription;
+  const lastCounsel = (c.data.counselings || []).slice(-1)[0];
 
   // 姿勢: pairId ごとにまとめる
   const pairs = [];
@@ -1007,6 +1128,17 @@ function CustomerDetail({ id }) {
             <StatTile label="累計来店" value={(c.data.visits || []).length} unit="回" />
           </div>
           {last && <div className="card p-4 mt-3"><BalanceGauge value={last.balance ?? calcAutonomic(last)} /></div>}
+          <ReservationEditor c={c} />
+          {lastCounsel && (
+            <div className="card p-4 mt-3">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[11px] font-bold text-cream-50 flex items-center gap-1.5"><Icon name="clipboard" size={13} className="text-moon-300" />最新のカウンセリング表 <span className="text-[9.5px] text-night-300 font-medium">{fmtMD(lastCounsel.date)}</span></p>
+                {(c.data.counselings || []).length > 1 && <span className="text-[9.5px] text-night-300">全{c.data.counselings.length}件</span>}
+              </div>
+              <div className="card-deep p-3.5"><CounselSheetView answers={lastCounsel.answers} /></div>
+              <CounselAiPanel staff={lastCounsel.staff} />
+            </div>
+          )}
           {presc && presc.until >= todayStr() && (
             <div className="card p-3.5 mt-3">
               <p className="text-[11px] font-bold text-cream-50 mb-1.5 flex items-center gap-1"><Icon name="pill" size={12} className="text-moon-300" />現在のホームケア処方 <span className="text-[9.5px] text-night-300 font-medium">{fmtMD(presc.until)}まで</span></p>
@@ -1367,6 +1499,62 @@ function mirrorPostureToCustomerApp(memberNo, rec) {
     localStorage.setItem('sleepy_app_v1', JSON.stringify(st));
     return true;
   } catch (e) { console.warn(e); return false; }
+}
+
+// 同一端末の顧客アプリへ任意の更新を反映（実運用はサーバー同期）
+function mirrorCustomerApp(memberNo, mutate) {
+  try {
+    const raw = localStorage.getItem('sleepy_app_v1');
+    if (!raw) return false;
+    const st = JSON.parse(raw);
+    if (!st || !st.profile || st.profile.memberNo !== memberNo) return false;
+    mutate(st);
+    localStorage.setItem('sleepy_app_v1', JSON.stringify(st));
+    return true;
+  } catch (e) { console.warn(e); return false; }
+}
+const readCounselingInbox = () => { try { return JSON.parse(localStorage.getItem('sleepy_counseling_inbox') || '[]'); } catch (e) { return []; } };
+const writeCounselingInbox = (arr) => { try { localStorage.setItem('sleepy_counseling_inbox', JSON.stringify(arr)); } catch (e) {} };
+
+/* スタッフ専用AI分析パネル（お客さまには表示されない） */
+function CounselAiPanel({ staff }) {
+  if (!staff) return null;
+  return (
+    <div className="rounded-[11px] border p-4 mt-3" style={{ borderColor:'rgba(217,180,92,.45)', background:'rgba(217,180,92,.05)' }}>
+      <div className="flex items-center gap-2 mb-2.5">
+        <Icon name="sparkle" size={14} className="text-moon-300" />
+        <p className="text-[12px] font-bold text-moon-300">AI分析（カウンセリング支援）</p>
+        <Badge tone="red">スタッフ専用・お客さまには表示されません</Badge>
+      </div>
+      <p className="text-[11.5px] font-bold text-cream-50 mb-2">自律神経の推定：<span className="text-[#f0968c]">{staff.autonomic}</span></p>
+      <p className="text-[10.5px] font-bold text-night-200 mb-1">推定される主課題</p>
+      {staff.issues.map((x, i) => (
+        <p key={i} className="text-[11.5px] text-night-100 leading-relaxed mb-1"><span className="font-bold text-cream-50">{i + 1}. {x.label}</span> — {x.why}</p>
+      ))}
+      <p className="text-[10.5px] font-bold text-night-200 mt-2.5 mb-1">カウンセリングの切り口</p>
+      {staff.points.map((p, i) => <p key={i} className="text-[11.5px] text-night-100 leading-relaxed mb-1">・{p}</p>)}
+      <div className="flex flex-wrap gap-1.5 mt-2.5">
+        <Badge tone="gold">施術フォーカス：{staff.focus.join('・')}</Badge>
+        {staff.plan && SUB_PLAN[staff.plan] && <Badge tone="blue">提案プラン：{SUB_PLAN[staff.plan].name}</Badge>}
+        {(staff.products || []).map(pid => PRODUCT[pid] && <Badge key={pid} tone="gray">提案：{PRODUCT[pid].name}</Badge>)}
+      </div>
+    </div>
+  );
+}
+
+function CounselSheetView({ answers }) {
+  const CONCERN_LABEL = { fallAsleep:'寝つきが悪い', wakeMid:'夜中に目が覚める', early:'朝早く目が覚める', daytime:'日中の眠気・だるさ', shoulder:'肩こり・首こり', lowback:'腰痛・腰の張り', headache:'頭痛', coldFeet:'手足の冷え', stress:'ストレス・緊張', looks:'姿勢・見た目' };
+  return (
+    <div className="text-[11.5px] text-night-100 space-y-2">
+      <p><span className="text-night-300">基本：</span>{answers.age || '年代未回答'}・{answers.job || 'お仕事未回答'}</p>
+      <p><span className="text-night-300">お悩み：</span>{(answers.concerns || []).map(id => CONCERN_LABEL[id] || id).join('、') || 'なし'}</p>
+      {answers.worst && <p className="card-deep p-2.5 rounded-[8px]"><span className="text-night-300">いちばん困っていること：</span>「{answers.worst}」</p>}
+      <p><span className="text-night-300">睡眠：</span>{answers.bed}〜{answers.wake}（満足度 {answers.sleepSat}/5）</p>
+      {(answers.habits || []).length > 0 && <p><span className="text-night-300">習慣：</span>{answers.habits.map(id => HABIT[id]?.label || id).join('、')}</p>}
+      {answers.bodyNote && <p><span className="text-night-300">からだ：</span>{answers.bodyNote}</p>}
+      {answers.hope && <p><span className="text-night-300">期待すること：</span>{answers.hope}</p>}
+    </div>
+  );
 }
 
 function PostureCaptureScreen({ id }) {

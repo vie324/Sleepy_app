@@ -340,7 +340,7 @@ const ARTICLES = [
       '16時に飲んだコーヒーは、22時になっても半分が体内で働き続けている計算です。寝つきが悪い方、眠りが浅い方は「14時まで」を目安にしましょう。',
       '午後はノンカフェインのハーブティーや麦茶がおすすめ。温かい飲み物は副交感神経も助けてくれます。',
     ],
-    point:'サロンでは午後も安心して飲める「おやすみハーブティー」を扱っているよ。',
+    point:'サロンでは午後の置き換えにぴったりな「LUNA CORE SALT」のソルトウォーターを扱っているよ。',
     quiz:{ q:'カフェインの効果が半分になるまでにかかる時間は？', choices:['30分〜1時間','1〜2時間','4〜6時間'], answer:2,
       explain:'4〜6時間です。夕方の1杯は就寝時刻まで残ります。14時以降は控えめに。' } },
   { id:'a_phone', icon:'phone', cat:'よる', title:'寝る前スマホが脳を「昼」にする',
@@ -480,32 +480,26 @@ const STRETCHES = [
 ];
 const STRETCH = Object.fromEntries(STRETCHES.map(s => [s.id, s]));
 
-// ショップ商品（回数券含む）
+// ショップ商品（KADOMORI公式ショップのラインナップ + 施術回数券）
 const PRODUCTS = [
-  { id:'p_pillow', icon:'bed', name:'SLEEPY オリジナル快眠まくら', price:12800, cat:'ねぐっず',
-    desc:'首のカーブを自然に支える、サロン監修の高さ調整式まくら。ストレートネック傾向の方に。',
-    tags:['neckForward','wakeMid','pillow'] },
-  { id:'p_bath', icon:'bath', name:'重炭酸 入浴タブレット 30錠', price:2480, cat:'にゅうよく',
-    desc:'ぬるめのお湯でもしっかり温まる炭酸入浴剤。深部体温の落差づくりをサポート。',
-    tags:['bath','coldFeet','fallAsleep'] },
-  { id:'p_tea', icon:'cup', name:'おやすみハーブティー 30包', price:1780, cat:'いんりょう',
-    desc:'カモミール＆ラベンダーのノンカフェインブレンド。午後のコーヒーの置き換えに。',
-    tags:['caffeine','fallAsleep','stress'] },
-  { id:'p_glasses', icon:'glasses', name:'ブルーライトカットメガネ', price:4980, cat:'めぐっず',
-    desc:'夜のスマホ・PC時間の光刺激をカット。メラトニンの分泌を守ります。',
-    tags:['phone'] },
-  { id:'p_pole', icon:'stretch', name:'ストレッチポール', price:8800, cat:'うんどう',
-    desc:'乗るだけで胸がひらいて背骨リセット。猫背・肩の左右差のセルフケアの定番。',
-    tags:['posture','shoulderDiff','shallowBreath'] },
-  { id:'p_mask', icon:'moon', name:'シルクアイマスク', price:2980, cat:'ねぐっず',
-    desc:'光を遮って眠りのホルモンを守る、肌ざわりなめらかなシルク100%。',
-    tags:['wakeMid','morning'] },
-  { id:'p_spray', icon:'droplet', name:'ラベンダー ピロースプレー', price:1980, cat:'アロマ',
-    desc:'枕にひと吹き。ラベンダーの香りが副交感神経をやさしくオンに。',
-    tags:['fallAsleep','stress'] },
-  { id:'p_gaba', icon:'pill', name:'GABA配合 おやすみサプリ 30日分', price:3980, cat:'サプリ',
-    desc:'ストレス社会の眠りをサポートするGABA・グリシン・テアニン配合。',
-    tags:['stress','wakeMid'] },
+  { id:'p_nmn', icon:'pill', name:'JIBUN NMN＋36,000', price:27540, cat:'インナーケア', badge:'数量限定15%OFF',
+    desc:'NMN 36,000mg配合のプレミアムサプリメント。国内GMP認定工場製造。年齢とともに落ちる回復力・めぐりをサポートし、「休んでも抜けない疲れ」にアプローチします。',
+    tags:['stress','lowScore','wakeMid'] },
+  { id:'p_saturn', icon:'droplet', name:'SATURN｜ミスト状化粧水', price:6820, cat:'スキンケア', badge:'NEW',
+    desc:'EGF・FGF（成長因子）配合のミスト状化粧水。小顔施術の発想から生まれた、ひと吹きでうるおうサロンクオリティ。おやすみ前のスキンケアタイムを整える1本。',
+    tags:['stress'] },
+  { id:'p_saturn_set', icon:'gift', name:'ミスト状化粧水SATURN 5個＋1プレゼント', price:34100, cat:'お得なセット',
+    desc:'SATURN 5本＋選べるギフト1点のお得なセット。ご家族・ギフトにも。',
+    tags:['stress'] },
+  { id:'p_salt250', icon:'cup', name:'LUNA CORE SALT 250g', price:2160, cat:'インナーケア',
+    desc:'天然ミネラルたっぷりの飲む塩（約2週間分）。水分とミネラルの補給は、体温調節と自律神経の土台。午後のコーヒーの置き換えにもおすすめのソルトウォーターを。',
+    tags:['caffeine','coldFeet','shortSleep','fallAsleep'] },
+  { id:'p_salt750', icon:'cup', name:'LUNA CORE SALT 750g', price:6426, cat:'インナーケア', badge:'定期初回20%OFF',
+    desc:'約6週間分のレギュラーサイズ。毎日のソルトウォーター習慣で、めぐりと深部体温のリズムづくりをサポートします。',
+    tags:['coldFeet','bath','wakeMid'] },
+  { id:'p_salt1500', icon:'cup', name:'LUNA CORE SALT 1500g', price:11000, cat:'インナーケア', badge:'定期初回20%OFF',
+    desc:'約90日の集中サイズ。ご家族でのミネラル習慣に。',
+    tags:['coldFeet','bath'] },
   { id:'t_5', icon:'ticket', name:'施術回数券（5回）', price:27500, cat:'かいすうけん', ticket:{ count:5, months:6 },
     desc:'1回あたり¥5,500。定期的なからだメンテナンスに。有効期限6ヶ月。',
     tags:['visit'] },
@@ -669,6 +663,82 @@ const MVV = {
   values: ['革新的な価値創造に挑戦し続ける','期待を超える感動体験を届ける','仕組みで再現性をつくる','共に成長し、共に豊かになる','予防に価値を置く'],
 };
 
+/* ---- カウンセリング表（LINEリッチメニュー→来店前入力を想定） ---- */
+const COUNSEL_CONCERNS = [
+  { id:'fallAsleep', label:'寝つきが悪い' }, { id:'wakeMid', label:'夜中に目が覚める' },
+  { id:'early', label:'朝早く目が覚めてしまう' }, { id:'daytime', label:'日中の眠気・だるさ' },
+  { id:'shoulder', label:'肩こり・首こり' }, { id:'lowback', label:'腰痛・腰の張り' },
+  { id:'headache', label:'頭痛' }, { id:'coldFeet', label:'手足の冷え' },
+  { id:'stress', label:'ストレス・緊張が強い' }, { id:'looks', label:'姿勢・見た目が気になる' },
+];
+const COUNSEL_AGES = ['20代','30代','40代','50代','60代以上'];
+const COUNSEL_JOBS = ['デスクワーク中心','立ち仕事中心','からだを動かす仕事','家事・育児中心','その他'];
+
+// 送信内容から 顧客向けのやさしい要約 と スタッフ専用のAI分析 を生成
+function counselingAnalyze(cs) {
+  const has = id => (cs.concerns || []).includes(id);
+  const hb = id => (cs.habits || []).includes(id);
+  let symp = 0;
+  ['fallAsleep','wakeMid','stress','headache'].forEach(id => { if (has(id)) symp += 14; });
+  ['shoulder','early','daytime'].forEach(id => { if (has(id)) symp += 8; });
+  if (hb('caffeine')) symp += 10;
+  if (hb('phone')) symp += 10;
+  if (hb('alcohol')) symp += 8;
+  if (cs.sleepSat <= 2) symp += 12;
+  const autonomic = symp >= 46 ? '交感神経がかなり優位（おつかれモード）' : symp >= 24 ? '交感神経がやや優位（がんばりモード）' : 'バランスは比較的良好';
+
+  const issues = [];
+  const push = (label, why, w) => issues.push({ label, why, w });
+  if (has('fallAsleep')) push('入眠困難', '「おやすみスイッチ」（副交感神経への切り替え）が苦手な状態', 5);
+  if (has('wakeMid') || has('early')) push('睡眠の維持が苦手', '眠りの後半が浅い。飲酒・光・からだの緊張の影響を確認したい', 4);
+  if (has('shoulder')) push('首肩の緊張', (cs.job === 'デスクワーク中心' ? '長時間デスクワークによる' : '') + '首肩のこわばり。自律神経の通り道への影響が大きい部位', 5);
+  if (has('lowback')) push('腰部の緊張', '骨盤まわりの硬さ。寝返りのしにくさ→中途覚醒への影響も', 3);
+  if (has('coldFeet')) push('末端の冷え', '放熱がうまくいかず深部体温が下がりにくい可能性', 3);
+  if (has('stress')) push('高ストレス状態', '交感神経の高ぶりが継続。呼吸の浅さもチェック', 4);
+  if (has('daytime')) push('日中のパフォーマンス低下', '睡眠の質不足のサイン。本診断で深掘り推奨', 3);
+  if (has('headache')) push('頭痛', '首肩の緊張性頭痛の可能性。眼精疲労・食いしばりも確認', 3);
+  if (!issues.length) push('明確な不調は少なめ', '予防・メンテナンス目的。良い状態の維持をゴールに', 2);
+  issues.sort((a, b) => b.w - a.w);
+
+  const points = [];
+  if (cs.worst) points.push(`ご本人の言葉:「${cs.worst.slice(0, 60)}${cs.worst.length > 60 ? '…' : ''}」→ まずここへの共感から`);
+  if (has('shoulder') && cs.job === 'デスクワーク中心') points.push('モニタの高さ・枕の高さの質問から入ると話しやすい');
+  if (hb('caffeine')) points.push('コーヒーの杯数と最後の1杯の時刻を確認（14時ルールの提案余地）');
+  if (hb('alcohol')) points.push('晩酌の頻度を否定せずヒアリング → 置き換え提案の下地づくり');
+  if (hb('phone')) points.push('就寝前のスマホ時間を確認 → 寝室ルールを一緒に決める切り口');
+  if (has('coldFeet')) points.push('入浴習慣（湯船かシャワーか）を確認');
+  if (cs.sleepSat <= 2) points.push('「眠りに点数をつけるなら？」で主観のズレを把握');
+  if (!points.length) points.push('現状維持の目標設定と、予防価値（MVV: 予防に価値を置く）の説明を');
+
+  const focus = [];
+  if (has('shoulder') || has('headache')) focus.push('首・肩甲骨まわり');
+  if (has('lowback')) focus.push('骨盤・腰部');
+  if (has('fallAsleep') || has('stress')) focus.push('後頭下筋群・呼吸(横隔膜)');
+  if (!focus.length) focus.push('全身バランス調整');
+
+  const products = [];
+  if (hb('caffeine') || has('coldFeet')) products.push('p_salt250');
+  if (has('stress') || has('daytime')) products.push('p_nmn');
+  if (has('looks')) products.push('p_saturn');
+  const plan = (has('fallAsleep') || has('wakeMid') || symp >= 46) ? 'sub_std' : 'sub_light';
+
+  const type = has('fallAsleep') || has('stress') ? QUICK_TYPES.mind : (has('wakeMid') || has('early')) ? QUICK_TYPES.quality : (has('shoulder') || has('lowback')) ? QUICK_TYPES.body : QUICK_TYPES.rhythm;
+  return {
+    customer: { icon: type.icon, label: type.label, comment: type.text, autonomicShort: symp >= 46 ? 'おつかれモード' : symp >= 24 ? 'がんばりモード' : 'おだやかモード' },
+    staff: { autonomic, sympScore: symp, issues: issues.slice(0, 4), points: points.slice(0, 5), focus, products, plan },
+  };
+}
+
+// 管理コンソールの受信箱へ（デモ: 同一端末localStorage。実運用はAPI送信）
+function pushCounselingInbox(entry) {
+  try {
+    const k = 'sleepy_counseling_inbox';
+    const arr = JSON.parse(localStorage.getItem(k) || '[]');
+    arr.push(entry);
+    localStorage.setItem(k, JSON.stringify(arr.slice(-50)));
+  } catch (e) { console.warn(e); }
+}
+
 /* ============================================================
    SECTION 2: 睡眠スコア・自律神経・レベル計算
    ============================================================ */
@@ -813,41 +883,41 @@ function analyzeIssues(state) {
 
 // 課題ID → 提案の対応表
 const RECIPES = {
-  neckForward: { stretch:['s_neck_side','s_chest'], product:['p_pillow','p_pole'], article:['a_posture'],
+  neckForward: { stretch:['s_neck_side','s_chest'], product:['t_10'], article:['a_posture'],
     msg:'首が前に出ると呼吸が浅くなり交感神経が優位に。首ケアとまくらの見直しがおすすめ。' },
-  shoulderDiff: { stretch:['s_scapula','s_chest'], product:['p_pole'], article:['a_posture'],
+  shoulderDiff: { stretch:['s_scapula','s_chest'], product:[], article:['a_posture'],
     msg:'肩の左右差は肩甲骨まわりの緊張のサイン。ほぐして眠りやすいからだへ。' },
-  pelvis: { stretch:['s_hip','s_waist'], product:['p_pole'], article:['a_posture'],
+  pelvis: { stretch:['s_hip','s_waist'], product:[], article:['a_posture'],
     msg:'骨盤の傾きは腰の緊張と寝返りに影響。おしりと腰をゆるめましょう。' },
-  posture: { stretch:['s_chest','s_scapula'], product:['p_pole'], article:['a_posture'],
+  posture: { stretch:['s_chest','s_scapula'], product:[], article:['a_posture'],
     msg:'姿勢が整うと呼吸が深くなり、副交感神経が働きやすくなります。' },
-  fallAsleep: { stretch:['s_478','s_neck_side'], product:['p_spray','p_tea'], article:['a_bath','a_phone'],
+  fallAsleep: { stretch:['s_478','s_neck_side'], product:['p_salt250','p_saturn'], article:['a_bath','a_phone'],
     msg:'寝つき改善のカギは「ブレーキ役」の副交感神経。呼吸法と香りでスイッチを。' },
-  wakeMid: { stretch:['s_478','s_waist'], product:['p_mask','p_gaba','p_pillow'], article:['a_alcohol'],
+  wakeMid: { stretch:['s_478','s_waist'], product:['p_nmn','p_salt750'], article:['a_alcohol'],
     msg:'中途覚醒には光・アルコール・からだの緊張対策が効きます。' },
-  shortSleep: { stretch:['s_morning'], product:['p_tea'], article:['a_weekend','a_sun'],
+  shortSleep: { stretch:['s_morning'], product:['p_salt250'], article:['a_weekend','a_sun'],
     msg:'まずは就寝を15分だけ前へ。朝の光でリズムから整えましょう。' },
-  caffeine: { stretch:[], product:['p_tea'], article:['a_caffeine'],
+  caffeine: { stretch:[], product:['p_salt250'], article:['a_caffeine'],
     msg:'午後はノンカフェインに置き換えると、夜のアクセルがゆるみます。' },
-  phone: { stretch:['s_478'], product:['p_glasses'], article:['a_phone'],
+  phone: { stretch:['s_478'], product:[], article:['a_phone'],
     msg:'夜の光刺激をカットしてメラトニンを守りましょう。' },
-  alcohol: { stretch:['s_478'], product:['p_tea'], article:['a_alcohol'],
+  alcohol: { stretch:['s_478'], product:['p_salt250'], article:['a_alcohol'],
     msg:'寝酒は後半の眠りを浅くします。置き換えドリンクがおすすめ。' },
-  bath: { stretch:['s_calf'], product:['p_bath'], article:['a_bath'],
+  bath: { stretch:['s_calf'], product:['p_salt750'], article:['a_bath'],
     msg:'湯船で深部体温の落差を作ると、自然な眠気がやってきます。' },
-  stress: { stretch:['s_478','s_chest'], product:['p_gaba','p_spray'], article:['a_ans'],
+  stress: { stretch:['s_478','s_chest'], product:['p_nmn','p_saturn'], article:['a_ans'],
     msg:'がんばりモードが続いています。意識的にブレーキタイムを。' },
-  lowScore: { stretch:['s_478'], product:['p_bath'], article:['a_ans'],
+  lowScore: { stretch:['s_478'], product:['p_nmn'], article:['a_ans'],
     msg:'スコアが低い日が続いたら、施術でからだからリセットするのが近道です。' },
   visitStale: { stretch:[], product:['t_5','t_10'], article:[],
     msg:'整えたからだも3週間で少しずつ元に戻ります。そろそろメンテナンスへ！' },
-  coldFeet: { stretch:['s_calf'], product:['p_bath'], article:['a_bath'], msg:'足先の血流を助けて放熱できるからだに。' },
-  morning: { stretch:['s_morning'], product:['p_mask'], article:['a_sun'], msg:'朝のリズムづくりから夜の眠りを整えましょう。' },
-  rhythm: { stretch:['s_morning'], product:['p_tea'], article:['a_sun','a_weekend'],
+  coldFeet: { stretch:['s_calf'], product:['p_salt750'], article:['a_bath'], msg:'足先の血流を助けて放熱できるからだに。' },
+  morning: { stretch:['s_morning'], product:['p_salt250'], article:['a_sun'], msg:'朝のリズムづくりから夜の眠りを整えましょう。' },
+  rhythm: { stretch:['s_morning'], product:['p_salt250'], article:['a_sun','a_weekend'],
     msg:'体内時計のずれが眠りを乱しています。起床時刻をそろえて朝の光を浴びるところから。' },
-  bodyTension: { stretch:['s_neck_side','s_scapula'], product:['p_pole','p_bath'], article:['a_posture'],
+  bodyTension: { stretch:['s_neck_side','s_scapula'], product:['p_nmn'], article:['a_posture'],
     msg:'からだのこわばりが強め。ここは施術の得意分野です。ストレッチとの二刀流でゆるめましょう。' },
-  env: { stretch:[], product:['p_mask','p_pillow','p_glasses'], article:['a_phone'],
+  env: { stretch:[], product:['p_saturn'], article:['a_phone'],
     msg:'寝室の光・音・寝具を1つずつ整えると、努力なしで眠りが深くなります。' },
   noLog: { stretch:['s_478'], product:[], article:['a_ans'],
     msg:'まずは今夜から睡眠記録を！スーピーくんがあなた専用のアドバイスを作ります。' },
@@ -891,6 +961,9 @@ function defaultState() {
     cart: [],
     visitFlow: null,        // {step, startedAt, beforeId, afterId, prescribed[], goalNote, feelBefore, feelAfter}
     xpLog: [],
+    counselings: [],        // カウンセリング表の送信履歴
+    accountStatus: 'registered', // guest(未登録) | registered
+    nextReservation: null,  // {date, time, menu} 次回のご予約（スタッフが登録）
     quickChecks: [],        // 来店前AI簡易診断の履歴
     assessments: [],        // 本診断(30問)の履歴
     slidesDone: [],         // 視聴済み教育スライド
@@ -976,7 +1049,7 @@ function seedDemoState(name, goal) {
     { id: uid(), date: addDays(today, -16), menu: '睡眠整体 60分', note: '寝つき改善の実感あり。' },
     { id: uid(), date: addDays(today, -3),  menu: '睡眠整体 60分', note: '肩の左右差が改善傾向。' },
   ];
-  st.orders = [{ id: uid(), date: addDays(today, -16), items: [{ id: 'p_tea', qty: 1 }], total: 1780 }];
+  st.orders = [{ id: uid(), date: addDays(today, -16), items: [{ id: 'p_salt250', qty: 1 }], total: 2160 }];
 
   // 姿勢分析のデモ結果（正面1件 + 施術前後のペア・画像なし）
   const pairId = uid();
@@ -1676,7 +1749,7 @@ function HomeScreen() {
           onError={e => { e.currentTarget.style.display = 'none'; }} />
         <div className="flex-1">
           <p className="text-[10.5px] text-night-200 font-bold">睡眠整体サロン SLEEPY</p>
-          <p className="text-[15px] font-bold text-cream-50">{greet}、{state.profile.name || 'ゲスト'}さん</p>
+          <p className="text-[15px] font-bold text-cream-50">{greet}、{state.profile.name || 'ゲスト'}さん{state.accountStatus === 'guest' && <span className="ml-1.5 text-[9px] font-bold text-night-200 border border-night-400/60 rounded-[5px] px-1.5 py-0.5 align-[2px]">ゲスト</span>}</p>
         </div>
         <button onClick={() => nav('member')} className="btn-press relative w-10 h-10 rounded-full bg-night-600 border border-night-400/50 flex items-center justify-center text-[16px]" aria-label="会員証">
           <Icon name="ticket" size={17} className="text-cream-100" />
@@ -1700,6 +1773,17 @@ function HomeScreen() {
           </div>
         </NightSky>
       </div>
+
+      {/* 次回のご予約 */}
+      {state.nextReservation && state.nextReservation.date >= t && (
+        <div className="px-4 mt-3">
+          <button onClick={() => nav('member')} className="btn-press w-full card p-3 flex items-center gap-3 text-left">
+            <Icon name="calendar" size={17} className="text-moon-300 shrink-0" />
+            <span className="flex-1 text-[12px] font-bold text-cream-50">次回のご予約：{fmtMDW(state.nextReservation.date)} {state.nextReservation.time}</span>
+            <Icon name="arrowR" size={14} className="text-night-300" />
+          </button>
+        </div>
+      )}
 
       {/* 来店フロー再開バナー */}
       {state.visitFlow && (
@@ -1754,6 +1838,20 @@ function HomeScreen() {
               })}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* カウンセリング表CTA（未記入の方向け） */}
+      {!(state.counselings || []).length && (
+        <div className="px-4 mt-3">
+          <button onClick={() => nav('counseling')} className="btn-press w-full card p-3.5 flex items-center gap-3 text-left hairline-gold">
+            <IconTile name="file" size={38} iconSize={18} tone="gold" />
+            <span className="flex-1">
+              <span className="block text-[13px] font-bold text-cream-50">ご来店前カウンセリング表</span>
+              <span className="block text-[10.5px] text-night-200">3分で入力 → ご来店がスムーズに（+20 XP）</span>
+            </span>
+            <Icon name="arrowR" size={16} className="text-moon-400" />
+          </button>
         </div>
       )}
 
@@ -2557,12 +2655,51 @@ function ArticleScreen({ route }) {
 /* ============================================================
    SECTION 13: ショップ（EC・回数券・パーソナライズ提案）
    ============================================================ */
+/* プラン加入・回数券ご購入時のアカウント登録（ゲスト→正式会員） */
+function RegistrationModal({ open, onClose, onDone }) {
+  const { state, update } = useApp();
+  const [name, setName] = useState(state.profile.name || '');
+  const [phone, setPhone] = useState(state.profile.phone || '');
+  const submit = () => {
+    if (!name.trim()) { toast('お名前を入力してください', 'err'); return; }
+    update(st => {
+      st.accountStatus = 'registered';
+      st.profile.name = name.trim();
+      st.profile.phone = phone.trim();
+      gainXp(st, 30, 'アカウント登録');
+    });
+    toast('アカウントを登録しました');
+    onClose();
+    if (onDone) onDone();
+  };
+  return (
+    <Modal open={open} onClose={onClose}>
+      <p className="kicker">Member Registration</p>
+      <h3 className="text-[16px] font-bold text-cream-50 mt-0.5">アカウント登録</h3>
+      <p className="text-[11.5px] text-night-200 mt-1.5 leading-relaxed">プラン・回数券をご利用のお客さまにアカウントを発行しています。登録すると回数券残数・次回のご予約・改善レポートがいつでも確認できます。</p>
+      <div className="mt-4 flex flex-col gap-2.5">
+        <input value={name} onChange={e => setName(e.target.value)} placeholder="お名前"
+          className="w-full bg-night-600 border border-night-400/50 rounded-[9px] px-3.5 py-3 text-[14px] font-bold text-cream-50 outline-none focus:border-moon-400" />
+        <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="電話番号（ご予約連絡用）" inputMode="tel"
+          className="w-full bg-night-600 border border-night-400/50 rounded-[9px] px-3.5 py-3 text-[14px] font-bold text-cream-50 outline-none focus:border-moon-400" />
+      </div>
+      <p className="text-[9.5px] text-night-300 mt-2">実運用ではLINEアカウント連携で入力なしに登録されます（docs/ARCHITECTURE.md）。</p>
+      <div className="mt-4 flex gap-2">
+        <Btn kind="ghost" full onClick={onClose}>あとで</Btn>
+        <Btn kind="moon" full onClick={submit}>登録する（+30 XP）</Btn>
+      </div>
+    </Modal>
+  );
+}
+
 function cartCount(state) { return (state.cart || []).reduce((a, c) => a + c.qty, 0); }
 
 /* 定額プラン・サブスク（設計図⑪） */
 function SubsSection() {
   const { state, update } = useApp();
   const [join, setJoin] = useState(null);
+  const [reg, setReg] = useState(false);
+  const [pendingJoin, setPendingJoin] = useState(null);
   const current = state.subscription;
   const plan = join && SUB_PLAN[join];
   return (
@@ -2602,14 +2739,19 @@ function SubsSection() {
             <div className="mt-4 flex gap-2">
               <Btn kind="ghost" full onClick={() => setJoin(null)}>やめる</Btn>
               <Btn kind="moon" full onClick={() => {
+                if (state.accountStatus === 'guest') { setPendingJoin(plan.id); setJoin(null); setReg(true); return; }
                 update(st => { st.subscription = { planId: plan.id, since: todayStr() }; gainXp(st, 30, 'サブスク加入'); });
-                toast(`${plan.name}へようこそ！ +30 XP`, 'xp');
+                toast(`${plan.name}へようこそ！`);
                 setJoin(null);
               }}>加入する</Btn>
             </div>
           </div>
         )}
       </Modal>
+      <RegistrationModal open={reg} onClose={() => setReg(false)} onDone={() => {
+        const pid = pendingJoin; setPendingJoin(null);
+        if (pid) { update(st => { st.subscription = { planId: pid, since: todayStr() }; gainXp(st, 30, 'サブスク加入'); }); toast(`${SUB_PLAN[pid].name}へようこそ！`); }
+      }} />
     </div>
   );
 }
@@ -2684,7 +2826,7 @@ function ShopScreen({ route }) {
           <div key={p.id} className="card p-3 flex flex-col">
             <button onClick={() => nav('product', { id: p.id })} className="btn-press text-left flex-1">
               <div className="h-[74px] rounded-[10px] bg-night-500/50 flex items-center justify-center text-cream-100/90"><Icon name={p.icon} size={30} strokeWidth={1.5} /></div>
-              <p className="text-[9.5px] font-bold text-moon-300 mt-2">{p.cat}</p>
+              <p className="text-[9.5px] font-bold text-moon-300 mt-2">{p.cat}{p.badge && <span className="ml-1.5 text-[8.5px] text-night-900 bg-moon-400 rounded-[5px] px-1.5 py-0.5 font-bold">{p.badge}</span>}</p>
               <p className="text-[12px] font-bold text-cream-50 leading-snug mt-0.5">{p.name}</p>
               <p className="text-[13px] font-bold text-cream-50 mt-1">{yen(p.price)}</p>
             </button>
@@ -2761,6 +2903,7 @@ function CartScreen() {
   const { state, update, back, nav } = useApp();
   const [done, setDone] = useState(null);
   const [delivery, setDelivery] = useState('store');
+  const [reg, setReg] = useState(false);
   const items = (state.cart || []).map(c => ({ ...c, p: PRODUCT[c.productId] })).filter(x => x.p);
   const total = items.reduce((a, x) => a + x.p.price * x.qty, 0);
 
@@ -2772,6 +2915,7 @@ function CartScreen() {
   });
 
   const checkout = () => {
+    if (state.accountStatus === 'guest' && items.some(x => x.p.ticket)) { setReg(true); return; }
     const order = { id: uid(), date: todayStr(), items: items.map(x => ({ id: x.productId, qty: x.qty })), total, delivery };
     update(st => {
       st.orders.push(order);
@@ -2836,6 +2980,7 @@ function CartScreen() {
         )}
       </div>
 
+      <RegistrationModal open={reg} onClose={() => setReg(false)} onDone={checkout} />
       <Modal open={!!done} onClose={() => { setDone(null); back(); }}>
         <div className="text-center py-2">
           <Soupy size={140} mood="excited" showZzz={false} className="mx-auto" />
@@ -2927,10 +3072,41 @@ function MemberScreen() {
   const lastVisit = state.visits[state.visits.length - 1];
   const karteVisit = openKarte && state.visits.find(v => v.id === openKarte);
 
+  if (state.accountStatus === 'guest') return (
+    <div className="min-h-screen">
+      <BackHeader title="会員証" onBack={back} />
+      <div className="p-4 pb-8">
+        <div className="card p-5 text-center">
+          <Soupy size={110} className="mx-auto" showZzz={false} />
+          <p className="kicker mt-2">Guest</p>
+          <h2 className="text-[15px] font-bold text-cream-50 mt-1">アカウントは未登録です</h2>
+          <p className="text-[11.5px] text-night-100 leading-relaxed mt-2">会員証・回数券残数・次回のご予約・改善レポートは、<span className="font-bold text-moon-300">プラン加入または回数券ご購入時のアカウント登録</span>後にご利用いただけます。</p>
+          <div className="mt-4"><Btn kind="moon" full onClick={() => nav('shop', { view: 'subs' })}>プラン・回数券を見る</Btn></div>
+        </div>
+        <div className="card-deep p-3.5 mt-3">
+          <p className="text-[11px] text-night-100 leading-relaxed">それまでも、カウンセリング表・かんたん診断・まなぶ・ショップはご利用いただけます。</p>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="min-h-screen">
       <BackHeader title="会員証・回数券" onBack={back} />
       <div className="p-4 pb-8">
+        {/* 次回のご予約 */}
+        {state.nextReservation && (
+          <div className="card p-4 mb-3 hairline-gold border">
+            <p className="kicker">Next Reservation</p>
+            <div className="flex items-center gap-3 mt-1">
+              <IconTile name="calendar" size={40} iconSize={19} tone="gold" />
+              <div>
+                <p className="text-[14px] font-bold text-cream-50">{fmtJP(state.nextReservation.date)} {state.nextReservation.time}</p>
+                <p className="text-[10.5px] text-night-200 mt-0.5">{state.nextReservation.menu || '睡眠整体'} ・ ご変更はサロンまで</p>
+              </div>
+            </div>
+          </div>
+        )}
         {/* 会員証カード */}
         <NightSky dense className="rounded-[14px] border border-moon-400/25 shadow-xl shadow-black/30">
           <div className="p-5">
@@ -3493,6 +3669,145 @@ function parseSleepCsv(text) {
     logs[date] = log;
   });
   return logs;
+}
+
+/* ============================================================
+   SECTION 15.4: カウンセリング表（LINE→来店前入力 / 結果は簡易表示のみ。
+   詳細なAI分析はスタッフ専用として管理コンソールにのみ表示される）
+   ============================================================ */
+function CounselingScreen() {
+  const { state, update, back } = useApp();
+  const [name, setName] = useState(state.profile.name || '');
+  const [age, setAge] = useState('');
+  const [job, setJob] = useState('');
+  const [concerns, setConcerns] = useState([]);
+  const [worst, setWorst] = useState('');
+  const [bed, setBed] = useState('23:30');
+  const [wake, setWake] = useState('06:30');
+  const [sleepSat, setSleepSat] = useState(3);
+  const [habits, setHabits] = useState([]);
+  const [bodyNote, setBodyNote] = useState('');
+  const [hope, setHope] = useState('');
+  const [result, setResult] = useState(null);
+
+  const toggle = (arr, set, id) => set(arr.includes(id) ? arr.filter(x => x !== id) : [...arr, id]);
+  const submit = () => {
+    if (!concerns.length && !worst.trim()) { toast('お悩みを1つ以上えらんでください', 'err'); return; }
+    const answers = { name: name.trim() || 'ゲスト', age, job, concerns, worst: worst.trim(), bed, wake, sleepSat, habits, bodyNote: bodyNote.trim(), hope: hope.trim() };
+    const analysis = counselingAnalyze(answers);
+    const rec = { id: uid(), date: todayStr(), answers, customer: analysis.customer };
+    update(st => {
+      st.counselings.push(rec);
+      if (!st.profile.name && answers.name !== 'ゲスト') st.profile.name = answers.name;
+      if (st.visitFlow) st.visitFlow.step = Math.max(st.visitFlow.step, 1);
+      if (!xpDoneToday(st, 'カウンセリング')) gainXp(st, 20, 'カウンセリング');
+    });
+    pushCounselingInbox({ id: rec.id, submittedAt: todayStr(), name: answers.name, memberNo: state.profile.memberNo, answers, staff: analysis.staff, customer: analysis.customer });
+    setResult(analysis.customer);
+  };
+
+  if (result) return (
+    <div className="min-h-screen">
+      <BackHeader title="カウンセリング表" onBack={back} />
+      <div className="p-4 pb-8 anim-slide-up">
+        <div className="card p-5 text-center">
+          <p className="kicker">Quick Analysis</p>
+          <h2 className="text-[16px] font-bold text-cream-50 mt-1">送信ありがとうございました</h2>
+          <div className="mt-3 flex justify-center"><Soupy size={120} mood="happy" showZzz={false} /></div>
+          <p className="text-[14px] font-bold text-cream-50 mt-2"><Icon name={result.icon} size={14} className="mr-1 text-moon-300 align-[-2px]" />あなたは「{result.label}」タイプ</p>
+          <p className="text-[11px] font-bold text-moon-300 mt-1">いまの状態：{result.autonomicShort}</p>
+          <p className="text-[12px] text-night-100 leading-relaxed mt-2 text-left">{result.comment}</p>
+        </div>
+        <div className="card-deep p-4 mt-3 flex gap-2.5 items-start">
+          <Icon name="users" size={18} className="text-moon-300 shrink-0 mt-0.5" />
+          <p className="text-[11.5px] text-night-100 leading-relaxed">内容はサロンのスタッフが事前に確認し、ご来店時のカウンセリングであなたに合わせたご提案をします。くわしい分析はご来店時にお伝えしますね。</p>
+        </div>
+        <div className="mt-4"><Btn kind="moon" full onClick={back}>とじる</Btn></div>
+      </div>
+    </div>
+  );
+
+  const Sec = ({ en, title, children }) => (
+    <div className="card p-4 mt-3">
+      <p className="kicker mb-0.5">{en}</p>
+      <p className="text-[13px] font-bold text-cream-50 mb-2.5">{title}</p>
+      {children}
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen">
+      <BackHeader title="カウンセリング表" onBack={back} />
+      <div className="p-4 pb-8">
+        <div className="card-deep p-3.5 flex gap-2.5 items-center">
+          <Soupy size={44} animate={false} showZzz={false} />
+          <p className="font-maru text-[11.5px] text-night-100 leading-relaxed font-bold">はじめまして！ご来店前に、いまの状態をおしえてね。所要3分・そのまま送信でOK！</p>
+        </div>
+
+        <Sec en="Profile" title="基本情報">
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="お名前（ニックネームOK）"
+            className="w-full bg-night-600 border border-night-400/50 rounded-[9px] px-3.5 py-2.5 text-[13px] font-bold text-cream-50 outline-none focus:border-moon-400" />
+          <p className="text-[10.5px] font-bold text-night-200 mt-3 mb-1.5">年代</p>
+          <div className="flex flex-wrap gap-1.5">{COUNSEL_AGES.map(a => <Chip key={a} active={age === a} onClick={() => setAge(a)}>{a}</Chip>)}</div>
+          <p className="text-[10.5px] font-bold text-night-200 mt-3 mb-1.5">お仕事・生活スタイル</p>
+          <div className="flex flex-wrap gap-1.5">{COUNSEL_JOBS.map(j => <Chip key={j} active={job === j} onClick={() => setJob(j)}>{j}</Chip>)}</div>
+        </Sec>
+
+        <Sec en="Concerns" title="いまのお悩み（あてはまるものすべて）">
+          <div className="grid grid-cols-2 gap-1.5">
+            {COUNSEL_CONCERNS.map(c => (
+              <button key={c.id} onClick={() => toggle(concerns, setConcerns, c.id)}
+                className={`btn-press px-3 py-2.5 rounded-[9px] border text-[11.5px] font-bold text-left ${concerns.includes(c.id) ? 'bg-moon-400/12 border-moon-400/60 text-cream-50' : 'bg-night-600 border-night-400/40 text-night-100'}`}>
+                {c.label}
+              </button>
+            ))}
+          </div>
+          <textarea value={worst} onChange={e => setWorst(e.target.value)} rows={2} placeholder="いちばん困っていること（自由記入）"
+            className="mt-2.5 w-full bg-night-600 border border-night-400/50 rounded-[9px] px-3.5 py-2.5 text-[12px] font-bold text-cream-50 outline-none focus:border-moon-400" />
+        </Sec>
+
+        <Sec en="Sleep" title="ふだんの睡眠">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="card-deep p-3 block">
+              <span className="text-[10px] font-bold text-night-200">平均のねる時間</span>
+              <input type="time" value={bed} onChange={e => setBed(e.target.value)} className="mt-1 w-full bg-transparent text-[17px] font-bold text-cream-50 outline-none" />
+            </label>
+            <label className="card-deep p-3 block">
+              <span className="text-[10px] font-bold text-night-200">平均のおきる時間</span>
+              <input type="time" value={wake} onChange={e => setWake(e.target.value)} className="mt-1 w-full bg-transparent text-[17px] font-bold text-cream-50 outline-none" />
+            </label>
+          </div>
+          <p className="text-[10.5px] font-bold text-night-200 mt-3 mb-1.5">睡眠の満足度</p>
+          <MoonRating value={sleepSat} onChange={setSleepSat} />
+        </Sec>
+
+        <Sec en="Habits" title="あてはまる習慣">
+          <div className="flex flex-col gap-1.5">
+            {HABITS.filter(h => !h.good).map(h => (
+              <button key={h.id} onClick={() => toggle(habits, setHabits, h.id)}
+                className={`btn-press flex items-center gap-2.5 px-3 py-2.5 rounded-[9px] border text-left ${habits.includes(h.id) ? 'bg-moon-400/12 border-moon-400/60' : 'bg-night-600 border-night-400/40'}`}>
+                <Icon name={h.icon} size={15} className="text-moon-300" />
+                <span className="text-[12px] font-bold text-cream-50">{h.label.replace('した', 'することが多い').replace('とった', 'とることが多い').replace('飲んだ', '飲むことが多い').replace('見た', '見ることが多い')}</span>
+              </button>
+            ))}
+          </div>
+        </Sec>
+
+        <Sec en="Body" title="からだについて（任意）">
+          <textarea value={bodyNote} onChange={e => setBodyNote(e.target.value)} rows={2} placeholder="痛む場所、通院中・服薬中のことなど"
+            className="w-full bg-night-600 border border-night-400/50 rounded-[9px] px-3.5 py-2.5 text-[12px] font-bold text-cream-50 outline-none focus:border-moon-400" />
+        </Sec>
+
+        <Sec en="Goal" title="サロンに期待すること（任意）">
+          <textarea value={hope} onChange={e => setHope(e.target.value)} rows={2} placeholder="例）朝スッキリ起きられるようになりたい"
+            className="w-full bg-night-600 border border-night-400/50 rounded-[9px] px-3.5 py-2.5 text-[12px] font-bold text-cream-50 outline-none focus:border-moon-400" />
+        </Sec>
+
+        <p className="text-[10px] text-night-300 mt-3 leading-relaxed">送信内容はカウンセリング目的でのみ使用し、スタッフが事前に確認します。</p>
+        <div className="mt-3"><Btn kind="moon" full onClick={submit}><Icon name="upload" size={15} className="mr-1" />送信する（+20 XP）</Btn></div>
+      </div>
+    </div>
+  );
 }
 
 function HealthSyncScreen() {
@@ -4102,17 +4417,17 @@ function VisitFlowScreen() {
   const SkipLink = ({ n }) => <button onClick={() => setStep(n)} className="text-[11px] font-bold text-night-300 mt-2">今回はスキップ →</button>;
 
   const STEPS = [
-    { icon: 'clipboard', title: '来店前AI診断', desc: 'かんたん8問でねむりの現在地を可視化',
+    { icon: 'file', title: 'カウンセリング表の記入', desc: 'LINEリッチメニューから来店前に入力',
       content: (
         <div>
-          {quick
-            ? <div className="card-deep p-3 mb-3 flex items-center gap-3">
-                <span className="text-[22px] font-bold text-moon-300">{quick.score}<span className="text-[10px]">点</span></span>
-                <p className="text-[11.5px] font-bold text-night-100">{quick.icon && <Icon name={quick.icon} size={13} className="mr-1 text-moon-300 align-[-2px]" />}{quick.label}<span className="block text-[9.5px] text-night-300">{fmtMD(quick.date)} 診断ずみ</span></p>
+          {(state.counselings || []).length
+            ? <div className="card-deep p-3 mb-3 flex items-center gap-2.5">
+                <Icon name="check" size={16} className="text-[#4cc2ae]" strokeWidth={2.2} />
+                <p className="text-[11.5px] font-bold text-night-100">記入ずみ（{fmtMD(state.counselings[state.counselings.length - 1].date)}）。スタッフが内容を確認してお迎えします。</p>
               </div>
-            : <p className="text-[11.5px] text-night-100 leading-relaxed mb-3">本来はご来店前にLINEで行う診断です。まだの方はここで3分でどうぞ。</p>}
+            : <p className="text-[11.5px] text-night-100 leading-relaxed mb-3">お悩み・生活習慣を3分で入力。内容をもとにスタッフが事前準備し、カウンセリングがスムーズになります。</p>}
           <div className="flex flex-col gap-2">
-            {!quick && <Btn kind="moon" full onClick={() => nav('quick')}><Icon name="clipboard" size={15} className="mr-1" />かんたん診断をする（3分）</Btn>}
+            {!(state.counselings || []).length && <Btn kind="moon" full onClick={() => nav('counseling')}><Icon name="file" size={15} className="mr-1" />カウンセリング表を書く（3分）</Btn>}
             <NextBtn n={1}>チェックインへすすむ ✓</NextBtn>
           </div>
         </div>) },
@@ -4664,7 +4979,7 @@ function App() {
 
   if (!state.onboarded) {
     return <Onboarding onStart={(name, goal, demo) => {
-      const st = demo ? seedDemoState(name, goal) : (() => { const d = defaultState(); d.onboarded = true; d.profile.name = name; d.profile.goal = goal; return d; })();
+      const st = demo ? seedDemoState(name, goal) : (() => { const d = defaultState(); d.onboarded = true; d.profile.name = name; d.profile.goal = goal; d.accountStatus = 'guest'; return d; })();
       replaceAll(st);
       toast(`ようこそ、${name}さん！`);
     }} />;
@@ -4691,6 +5006,7 @@ function App() {
     case 'slides': screen = <SlidePlayerScreen route={route} />; break;
     case 'sounds': screen = <SoundsScreen />; break;
     case 'health': screen = <HealthSyncScreen />; break;
+    case 'counseling': screen = <CounselingScreen />; break;
     default: screen = <HomeScreen />;
   }
 
