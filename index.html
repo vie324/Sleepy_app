@@ -940,6 +940,179 @@ function buildRecommendations(state) {
 }
 
 /* ============================================================
+   SECTION 3.5: 今日の状態・今日やること・週次AIフィードバック
+   （役員FBの「状態→原因→行動」を1本につなぐヘルパー群）
+   ============================================================ */
+
+// 睡眠スコアの「なぜこの点数か」を短い言葉で説明する
+function scoreReasons(log) {
+  const rs = [];
+  const h = sleepHours(log.bed, log.wake);
+  if (h > 0 && h < 6.5) rs.push(`睡眠時間 ${h}h（理想は7〜8.5h）`);
+  else if (h > 9) rs.push(`ねすぎ傾向（${h}h）`);
+  if (log.quality <= 2) rs.push('ぐっすり感が低め');
+  if ((log.awakenings || 0) >= 2) rs.push(`中途覚醒 ${log.awakenings}回`);
+  (log.habits || []).filter(id => HABIT[id] && !HABIT[id].good).slice(0, 2).forEach(id => rs.push(HABIT[id].label));
+  if (!rs.length) rs.push('大きなマイナス要因はありません');
+  return rs.slice(0, 3);
+}
+
+// 「きょうやること」: 記録・処方ホームケア・おすすめ行動・来店提案を1本のリストに統合
+function buildTodayPlan(state) {
+  const t = todayStr();
+  const items = [];
+  const recs = buildRecommendations(state);
+  const issues = analyzeIssues(state);
+  const prescribed = (state.prescription && state.prescription.until >= t) ? state.prescription.items : [];
+
+  items.push({ id: 'log', icon: 'moon', label: 'ゆうべの睡眠を記録する', sub: '1分でOK・毎日の基本', xp: 12,
+    done: !!state.sleepLogs[t], go: { name: 'sleep', params: { open: true } } });
+
+  const presStretch = prescribed.filter(id => STRETCH[id]);
+  const stretchId = presStretch[0] || recs.flatMap(r => r.stretch)[0] || 's_478';
+  const s = STRETCH[stretchId];
+  items.push({ id: 'stretch', icon: s.icon, label: `${s.name}（約${s.mins}分）`,
+    sub: presStretch[0] ? 'サロンからの処方' : 'いまの課題に合わせて選びました', xp: 15,
+    done: xpCountToday(state, 'ストレッチ') > 0, go: { name: 'stretchPlay', params: { id: stretchId } } });
+
+  const presProduct = prescribed.find(id => PRODUCT[id]);
+  if (presProduct) {
+    items.push({ id: 'care', icon: PRODUCT[presProduct].icon, label: `${PRODUCT[presProduct].name} をつかう`,
+      sub: 'サロンからの処方ホームケア', xp: 0, done: false, go: { name: 'product', params: { id: presProduct } } });
+  } else if (issues.some(i => i.id === 'bath' || i.id === 'coldFeet')) {
+    items.push({ id: 'bath', icon: 'bath', label: '今夜は湯船に15分つかる', sub: '就寝90分前がベストタイミング', xp: 0,
+      done: (state.sleepLogs[t]?.habits || []).includes('bath'), go: { name: 'article', params: { id: 'a_bath' } } });
+  } else {
+    items.push({ id: 'sound', icon: 'headphones', label: 'おやすみサウンドで入眠準備', sub: '528Hz・シータ波・雨音', xp: 0,
+      done: false, go: { name: 'sounds' } });
+  }
+
+  const staleIssue = issues.find(i => i.id === 'visitStale');
+  if (state.nextReservation && state.nextReservation.date >= t) {
+    items.push({ id: 'visit', icon: 'calendar', label: `次回のご予約 ${fmtMDW(state.nextReservation.date)} ${state.nextReservation.time || ''}`,
+      sub: '会員証からいつでも確認できます', xp: 0, done: false, go: { name: 'member' } });
+  } else if (staleIssue) {
+    items.push({ id: 'visit', icon: 'building', label: 'そろそろメンテナンス来店を', sub: staleIssue.label + '。整えたからだは約3週間で戻ります', xp: 0,
+      done: false, go: { name: 'member' } });
+  }
+  return items.slice(0, 4);
+}
+
+// 直近7日 vs その前7日の比較 → AIフィードバック文を生成
+function bedMinutes(bed) {
+  const [h, m] = bed.split(':').map(Number);
+  let v = h * 60 + m;
+  if (v < 12 * 60) v += 24 * 60; // 深夜0〜11時台は翌日扱いで連続化
+  return v;
+}
+function weekCompare(state) {
+  const t = todayStr();
+  const pickRange = (from, to) => Object.keys(state.sleepLogs).filter(d => d >= from && d <= to).sort()
+    .map(d => ({ date: d, ...state.sleepLogs[d] }));
+  const cur = pickRange(addDays(t, -6), t);
+  const prev = pickRange(addDays(t, -13), addDays(t, -7));
+  const stat = (logs) => logs.length ? {
+    n: logs.length,
+    score: avg(logs.map(l => l.score)),
+    hours: avg(logs.map(l => sleepHours(l.bed, l.wake))),
+    awake: avg(logs.map(l => l.awakenings || 0)),
+    bath: logs.filter(l => (l.habits || []).includes('bath')).length,
+    spread: logs.length >= 2 ? Math.max(...logs.map(l => bedMinutes(l.bed))) - Math.min(...logs.map(l => bedMinutes(l.bed))) : 0,
+  } : null;
+  const a = stat(cur), b = stat(prev);
+
+  const lines = [];
+  if (!a) return { lines: ['まだ今週の記録がありません。今夜の記録から、スーピーくんの分析がはじまります。'], focus: null, enough: false };
+  if (a && b && b.n >= 3 && a.n >= 3) {
+    const ds = Math.round(a.score - b.score);
+    if (ds >= 3) lines.push(`直近7日の平均スコアは${Math.round(a.score)}点。前の週より ${ds}点 アップしています。`);
+    else if (ds <= -3) lines.push(`直近7日の平均スコアは${Math.round(a.score)}点。前の週より ${-ds}点 下がっています。生活の変化を振り返ってみましょう。`);
+    else lines.push(`直近7日の平均スコアは${Math.round(a.score)}点。前の週とほぼ横ばいで安定しています。`);
+    const dh = a.hours - b.hours;
+    if (Math.abs(dh) >= 0.4) lines.push(dh > 0 ? `睡眠時間は平均${a.hours.toFixed(1)}hに増加（+${dh.toFixed(1)}h）。良い流れです。` : `睡眠時間が平均${a.hours.toFixed(1)}hに減少（${dh.toFixed(1)}h）。まずは就寝を15分前倒しから。`);
+    const da = a.awake - b.awake;
+    if (da <= -0.4) lines.push(`途中で目が覚める回数が減っています（平均${a.awake.toFixed(1)}回）。眠りの後半が深くなってきたサインです。`);
+    else if (da >= 0.4) lines.push(`睡眠時間は確保できていても、途中覚醒が増えています（平均${a.awake.toFixed(1)}回）。飲酒・光・からだの緊張をチェックしましょう。`);
+    if (a.spread && b.spread && a.spread <= b.spread - 30) lines.push(`就寝時刻のばらつきが約${Math.round(b.spread)}分→約${Math.round(a.spread)}分に整ってきました。体内時計が安定してきています。`);
+    else if (a.spread >= 90) lines.push(`就寝時刻のばらつきが約${Math.round(a.spread)}分あります。「同じ時刻にねる」が今週のカギです。`);
+  } else {
+    lines.push(`直近${a.n}日の平均スコアは${Math.round(a.score)}点・平均${a.hours.toFixed(1)}時間。あと${Math.max(0, 3 - a.n)}日記録すると、週ごとの変化を比較できます。`.replace('あと0日記録すると、', '来週から'));
+    if (a.awake >= 1.3) lines.push(`途中で目が覚める回数が平均${a.awake.toFixed(1)}回とやや多め。就寝前の飲酒・スマホの光を見直してみましょう。`);
+  }
+  if (a.bath <= Math.floor(a.n / 3) && a.n >= 3) lines.push(`今週の湯船は${a.bath}回。入浴習慣を整えることをおすすめします（就寝90分前・40℃・15分）。`);
+
+  const issues = analyzeIssues(state).filter(i => i.id !== 'noLog');
+  const top = issues[0] && RECIPES[issues[0].id] ? { issue: issues[0], recipe: RECIPES[issues[0].id] } : null;
+  return { lines: lines.slice(0, 4), focus: top, enough: !!(a && a.n >= 3) };
+}
+
+// 本診断の結果 → 状態・原因・おすすめ施術・アイテム・自宅ケア・来店提案
+const ASSESS_TREATMENTS = {
+  sleep:  '自律神経をととのえる睡眠整体（全身調整）',
+  rhythm: '全身調整＋生活リズムカウンセリング',
+  stress: '後頭下筋群・呼吸（横隔膜）まわりの調整',
+  body:   '首・肩甲骨・骨盤まわりの集中ほぐし',
+  env:    '睡眠整体＋寝具・睡眠環境カウンセリング',
+};
+function assessProposal(rec) {
+  const worst = rec.worst || [];
+  const causes = worst.map(catId => ({
+    cat: ASSESS_CATS.find(c => c.id === catId),
+    score: rec.cats[catId],
+    text: ASSESS_CAT_ADVICE[catId].low,
+  }));
+  const treatments = [...new Set(worst.map(id => ASSESS_TREATMENTS[id]))];
+  const issueIds = worst.flatMap(id => ASSESS_CAT_ADVICE[id].issues);
+  const products = [...new Set(issueIds.flatMap(id => (RECIPES[id]?.product || [])))].filter(id => !PRODUCT[id]?.ticket).slice(0, 3);
+  const stretches = [...new Set(issueIds.flatMap(id => (RECIPES[id]?.stretch || [])))].slice(0, 3);
+  const serious = rec.level.rank === 'C' || rec.level.rank === 'D';
+  const soundId = worst.includes('stress') || worst.includes('sleep') ? 'theta' : worst.includes('env') ? 'rain' : '528';
+  return { causes, treatments, products, stretches, serious, soundId };
+}
+
+// あなたへのおすすめプラン（サブスクを料金表ではなく提案として見せる）
+function recommendPlan(state) {
+  const assess = (state.assessments || [])[state.assessments.length - 1];
+  const issues = analyzeIssues(state).filter(i => i.id !== 'noLog');
+  const heavy = issues.filter(i => ['fallAsleep', 'wakeMid', 'bodyTension', 'lowScore', 'stress', 'neckForward'].includes(i.id));
+  const hasData = !!(assess || Object.keys(state.sleepLogs || {}).length);
+  let planId = 'sub_light';
+  const why = [];
+  if (assess && assess.total < 65) { planId = 'sub_std'; why.push(`本診断の整いスコアが${assess.total}点（ランク${assess.level.rank}）`); }
+  if (heavy.length >= 2) { planId = 'sub_std'; why.push(`「${heavy[0].label}」など課題が${heavy.length}件見つかっている`); }
+  if (planId === 'sub_light' && assess) why.push(`整いスコア${assess.total}点。よい状態のキープが目標`);
+  if (planId === 'sub_light' && !why.length && hasData) why.push('大きな課題は少なめ。月1回のメンテナンスで十分');
+  const addCare = issues.some(i => ['bath', 'env', 'coldFeet'].includes(i.id));
+  return { planId, addCare, why: why.slice(0, 2), hasData };
+}
+
+// 商品購入後フォロー（購入3日後にホームケアの定着を確認）
+function pendingFollowup(state) {
+  const t = todayStr();
+  return (state.orders || []).find(o => {
+    if ((state.productFollowups || {})[o.id]) return false;
+    const days = Math.round((new Date(t) - new Date(o.date)) / 86400000);
+    if (days < 3) return false;
+    return (o.items || []).some(x => PRODUCT[x.id] && !PRODUCT[x.id].ticket);
+  });
+}
+
+// SHOP: 悩みから選ぶカテゴリ（商品tagsとの対応）
+const SHOP_CONCERNS = [
+  { id: 'deep',    icon: 'moon',    label: 'ぐっすり眠りたい',       tags: ['fallAsleep', 'wakeMid', 'shortSleep'], note: '入眠と眠りの深さをサポートするアイテムです。' },
+  { id: 'tired',   icon: 'bolt',    label: '疲れを取りたい',         tags: ['stress', 'lowScore', 'wakeMid'], note: '「休んでも抜けない疲れ」に、回復力とめぐりからアプローチ。' },
+  { id: 'balance', icon: 'scales',  label: '自律神経を整えたい',     tags: ['stress', 'fallAsleep', 'caffeine'], note: '切り替え上手なからだづくりを助けるアイテムです。' },
+  { id: 'bath',    icon: 'bath',    label: '入浴習慣をつくりたい',   tags: ['bath', 'coldFeet'], note: '深部体温のリズムづくりは快眠のいちばんの近道。' },
+  { id: 'tension', icon: 'stretch', label: 'からだの緊張を取りたい', tags: ['visit'], note: 'こわばりの根本ケアは施術がいちばん得意です。回数券がお得。' },
+];
+
+// ホームのお知らせバナー（メインの「今日の状態・やること」を邪魔しない1枠のみ）
+const BANNERS = [
+  { id: 'bn_summer2026', icon: 'gift', title: '夏の快眠キャンペーン開催中', sub: '回数券ご購入で入浴剤プレゼント（8月末まで）', go: { name: 'shop' } },
+  { id: 'bn_headeye',    icon: 'sparkle', title: '新メニュー「ヘッド＆アイ15分」', sub: '次回ご来店時にオプションで体験できます', go: { name: 'member' } },
+];
+
+/* ============================================================
    SECTION 4: 状態管理（localStorage）・デモデータ
    ============================================================ */
 const STORE_KEY = 'sleepy_app_v1';
@@ -969,6 +1142,11 @@ function defaultState() {
     slidesDone: [],         // 視聴済み教育スライド
     subscription: null,     // {planId, since}
     prescription: null,     // {items:[{kind,id}], date, until} 本日のホームケア処方(1〜3点)
+    mode: 'home',           // 'home'(自宅モード) | 'store'(店内モード)
+    dismissedBanners: [],   // 閉じたお知らせバナーのid
+    productFollowups: {},   // {orderId: {date, answer}} 購入後フォローの回答
+    largeText: false,       // 文字を大きく表示
+    assessDraft: null,      // {answers[], idx, date} 本診断の途中保存
   };
 }
 
@@ -1652,6 +1830,16 @@ function soupyMoodOf(state) {
   if (a < 55) return 'tired';
   return 'sleep';
 }
+function friendshipOf(state) {
+  const totalPets = (state.xpLog || []).filter(x => x.reason === 'なでなで').length;
+  return Math.min(5, 1 + Math.floor(totalPets / 15));
+}
+// レベルlvに到達するのに必要な累計XP
+function xpForLevel(lv) {
+  let total = 0;
+  for (let k = 1; k < lv; k++) total += 60 + (k - 1) * 30;
+  return total;
+}
 
 function SpeechBubble({ text, onClick }) {
   return (
@@ -1714,11 +1902,292 @@ function RecCard({ rec }) {
   );
 }
 
+/* 自宅⇄店内モード切り替え（役員FB⑥: 利用シーンで画面を分ける） */
+function ModeSwitch() {
+  const { state, update } = useApp();
+  const set = (m) => update(st => { st.mode = m; });
+  return (
+    <div className="grid grid-cols-2 gap-1 p-1 rounded-[11px] bg-night-700 border border-night-500/60">
+      {[{ id: 'home', icon: 'home', label: 'じたくモード' }, { id: 'store', icon: 'building', label: '店内モード' }].map(m => (
+        <button key={m.id} onClick={() => set(m.id)}
+          className={`btn-press py-2 rounded-[8px] text-[12px] font-bold flex items-center justify-center gap-1.5 transition ${state.mode === m.id ? 'bg-cream-100 text-night-900' : 'text-night-200'}`}>
+          <Icon name={m.icon} size={14} />{m.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/* きょうの状態（スコア → なぜ → 次の一歩）役員FB②の核 */
+function TodayConditionCard() {
+  const { state, nav } = useApp();
+  const t = todayStr();
+  const todayLog = state.sleepLogs[t];
+  const lastLog = recentLogs(state, 1)[0];
+  const log = todayLog || lastLog;
+  const prev = log ? recentLogs(state, 2).filter(l => l.date !== log.date).pop() : null;
+  const diff = log && prev ? log.score - prev.score : null;
+
+  if (!log) return (
+    <button onClick={() => nav('sleep', { open: true })} className="btn-press w-full card p-4 flex items-center gap-3 text-left hairline-gold">
+      <IconTile name="pencil" size={44} iconSize={20} tone="gold" />
+      <span className="flex-1">
+        <span className="block text-[14.5px] font-bold text-cream-50">まずは今夜のねむりを記録</span>
+        <span className="block text-[11.5px] text-night-200 mt-0.5">記録すると、きょうの状態とやることが表示されます</span>
+      </span>
+      <Icon name="arrowR" size={16} className="text-moon-400" />
+    </button>
+  );
+
+  const sl = scoreLabel(log.score);
+  const reasons = scoreReasons(log);
+  const balance = log.balance ?? calcAutonomic(log);
+  const mode = autonomicLabel(balance);
+  return (
+    <button onClick={() => nav('sleep')} className="btn-press w-full card p-4 text-left">
+      <div className="flex items-center justify-between mb-2">
+        <p className="kicker">Today's Condition</p>
+        <span className="text-[10.5px] font-bold text-night-300">{todayLog ? 'けさの記録' : `${fmtMDW(log.date)} の記録`}｜くわしく →</span>
+      </div>
+      <div className="flex items-center gap-4">
+        <ScoreRing score={log.score} size={96} sub="睡眠スコア" showLabel={false} />
+        <div className="flex-1 min-w-0">
+          <p className="text-[16px] font-bold leading-tight" style={{ color: sl.color }}>{sl.label}
+            {diff !== null && diff !== 0 && <span className={`ml-2 text-[12px] ${diff > 0 ? 'text-[#4cc2ae]' : 'text-[#f0968c]'}`}>{diff > 0 ? `+${diff}` : diff} 前日比</span>}
+          </p>
+          <p className="text-[11.5px] font-bold text-night-100 mt-1">いまは「{mode.short}」</p>
+          <div className="mt-2 flex flex-col gap-1">
+            {reasons.map((r, i) => (
+              <p key={i} className="text-[11.5px] text-night-100 leading-snug flex items-start gap-1.5">
+                <span className="text-moon-300 mt-[1px]"><Icon name="info" size={12} /></span>{r}
+              </p>
+            ))}
+          </div>
+        </div>
+      </div>
+      {!todayLog && <p className="mt-2.5 text-[11px] font-bold text-moon-300">けさの記録がまだです。タップして記録 → きょうの分析へ</p>}
+    </button>
+  );
+}
+
+/* きょうやること（記録・処方・おすすめ行動・来店を1本化）役員FB①②⑨ */
+function TodayPlanCard() {
+  const { state, nav } = useApp();
+  const plan = useMemo(() => buildTodayPlan(state), [state]);
+  const doneCount = plan.filter(p => p.done).length;
+  const streak = calcStreak(state);
+  return (
+    <div>
+      <SectionTitle icon="check" en="Today's Plan" title="きょうやること" sub={`クリアするとXPがたまります（${doneCount}/${plan.length} 完了）`}
+        right={<button onClick={() => nav('calendar')} className="text-[11.5px] font-bold text-moon-300">れんぞく{streak}日 →</button>} />
+      <div className="card p-2">
+        {plan.map(m => (
+          <button key={m.id} onClick={() => nav(m.go.name, m.go.params)} className="btn-press w-full flex items-center gap-3 px-3 py-3 rounded-[9px] hover:bg-night-500/30 text-left">
+            <span className={`w-10 h-10 rounded-[10px] flex items-center justify-center shrink-0 ${m.done ? 'bg-cpara/20 text-[#4cc2ae]' : 'bg-night-500 text-cream-100'}`}>
+              {m.done ? <Icon name="check" size={17} strokeWidth={2.2} /> : <Icon name={m.icon} size={17} />}
+            </span>
+            <span className="flex-1 min-w-0">
+              <span className={`block text-[13.5px] font-bold leading-snug ${m.done ? 'text-night-300 line-through' : 'text-cream-50'}`}>{m.label}</span>
+              <span className="block text-[10.5px] text-night-200 mt-0.5">{m.sub}</span>
+            </span>
+            {m.done
+              ? <span className="text-[11px] font-bold shrink-0" style={{ color: '#4cc2ae' }}>クリア✓</span>
+              : m.xp > 0 ? <span className="text-[11px] font-bold text-moon-400 shrink-0">+{m.xp} XP</span> : <Icon name="arrowR" size={14} className="text-night-300 shrink-0" />}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* お知らせバナー（1枠のみ・閉じられる）役員FB㉑ */
+function HomeBanner() {
+  const { state, update, nav } = useApp();
+  const bn = BANNERS.find(b => !(state.dismissedBanners || []).includes(b.id));
+  if (!bn) return null;
+  return (
+    <div className="card-deep p-3 flex items-center gap-2.5">
+      <Icon name={bn.icon} size={17} className="text-moon-300 shrink-0" />
+      <button onClick={() => nav(bn.go.name, bn.go.params)} className="btn-press flex-1 text-left min-w-0">
+        <span className="block text-[12px] font-bold text-cream-50 truncate">{bn.title}</span>
+        <span className="block text-[10.5px] text-night-200 truncate">{bn.sub}</span>
+      </button>
+      <button onClick={() => update(st => { st.dismissedBanners = [...(st.dismissedBanners || []), bn.id]; })}
+        className="btn-press w-7 h-7 rounded-full bg-night-600 flex items-center justify-center shrink-0" aria-label="閉じる">
+        <Icon name="close" size={13} className="text-night-200" />
+      </button>
+    </div>
+  );
+}
+
+/* 商品購入後フォロー（購入3日後にホームケア定着を確認）役員FB⑰ */
+function FollowupCard() {
+  const { state, update, nav } = useApp();
+  const [open, setOpen] = useState(false);
+  const order = pendingFollowup(state);
+  if (!order) return null;
+  const firstId = (order.items || []).map(x => x.id).find(id => PRODUCT[id] && !PRODUCT[id].ticket);
+  const p = PRODUCT[firstId];
+  if (!p) return null;
+  const days = Math.round((new Date(todayStr()) - new Date(order.date)) / 86400000);
+  const isSalt = firstId.startsWith('p_salt');
+
+  const answer = (ans) => {
+    update(st => {
+      st.productFollowups = { ...(st.productFollowups || {}), [order.id]: { date: todayStr(), answer: ans } };
+      gainXp(st, 8, 'ホームケアチェック');
+    });
+    toast('+8 XP 教えてくれてありがとう！', 'xp');
+    setOpen(false);
+    if (ans === 'no') nav('product', { id: firstId });
+    if (ans === 'yes' && isSalt) nav('shop', { view: 'subs' });
+  };
+
+  return (
+    <div>
+      <button onClick={() => setOpen(true)} className="btn-press w-full card p-3.5 flex items-center gap-3 text-left hairline-gold">
+        <Soupy size={44} animate={false} showZzz={false} />
+        <span className="flex-1 min-w-0">
+          <span className="block text-[12.5px] font-bold text-cream-50 leading-snug">「{p.name}」その後どう？</span>
+          <span className="block text-[10.5px] text-night-200 mt-0.5">ご購入から{days}日。つづけられているか教えてね（+8 XP）</span>
+        </span>
+        <Icon name="arrowR" size={15} className="text-moon-400 shrink-0" />
+      </button>
+      <Modal open={open} onClose={() => setOpen(false)}>
+        <p className="kicker">Home Care Check</p>
+        <h3 className="text-[16px] font-bold text-cream-50 mt-0.5">{p.name}、3日つづけられていますか？</h3>
+        <p className="text-[11.5px] text-night-200 mt-1.5 leading-relaxed">ホームケアは「ゆるく続ける」がいちばん効きます。いまの状況におうじてサポートします。</p>
+        <div className="mt-4 flex flex-col gap-2">
+          <Btn kind="moon" full onClick={() => answer('yes')}>毎日つづけている！</Btn>
+          <Btn kind="ghost" full onClick={() => answer('sometimes')}>ときどき使っている</Btn>
+          <Btn kind="ghost" full onClick={() => answer('no')}>まだ使えていない…</Btn>
+        </div>
+        <p className="text-[10px] text-night-300 mt-3 leading-relaxed">
+          「毎日つづけている」→ {isSalt ? '定期便にすると切らさず続けられます。' : '効果を実感しやすい使い方をご提案します。'}<br />
+          「まだ使えていない」→ 使い方ページへご案内します。困りごとはご来店時にスタッフへどうぞ。
+        </p>
+      </Modal>
+    </div>
+  );
+}
+
+/* 店内モードのホーム（本診断・スタッフ確認データ・前後比較・商品体験）役員FB⑥⑦ */
+function StoreHome() {
+  const { state, nav } = useApp();
+  const t = todayStr();
+  const logs7 = recentLogs(state, 7);
+  const assess = state.assessments[state.assessments.length - 1];
+  const counsel = (state.counselings || [])[state.counselings.length - 1];
+  const recs = useMemo(() => buildRecommendations(state), [state]);
+  const recProductIds = [...new Set(recs.flatMap(r => r.product))].filter(id => !PRODUCT[id]?.ticket).slice(0, 3);
+  const posture = state.posture || [];
+  const hasPair = posture.some(p => p.phase === 'before') && posture.some(p => p.phase === 'after');
+  const proposal = assess ? assessProposal(assess) : null;
+  const visitedToday = state.visits.some(v => v.date === t);
+
+  return (
+    <div>
+      {/* 本日の流れ */}
+      <div className="px-4 mt-3">
+        <button onClick={() => nav('visit')} className="btn-press w-full card p-4 flex items-center gap-3 text-left hairline-gold">
+          <IconTile name="building" size={46} iconSize={22} tone="gold" />
+          <span className="flex-1">
+            <span className="block text-[14.5px] font-bold text-cream-50">{state.visitFlow ? '本日の流れをつづける' : visitedToday ? '本日の来店ガイドを見る' : '来店ガイドをはじめる'}</span>
+            <span className="block text-[11px] text-night-200 mt-0.5">チェックイン → 本診断 → 施術 → 前後比較 → ホームケア処方</span>
+          </span>
+          <Icon name="arrowR" size={17} className="text-moon-400" />
+        </button>
+      </div>
+
+      {/* スタッフ確認用データ */}
+      <div className="px-4 mt-4">
+        <SectionTitle icon="users" en="For Staff" title="スタッフに見せるデータ" sub="この画面をそのままスタッフにお見せください" />
+        <div className="card p-4">
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div><p className="text-[22px] font-bold text-cream-50 tabular">{assess ? assess.total : '−'}</p><p className="text-[9.5px] text-night-200 font-bold">本診断（整い）</p></div>
+            <div><p className="text-[22px] font-bold text-cream-50 tabular">{logs7.length ? Math.round(avg(logs7.map(l => l.score))) : '−'}</p><p className="text-[9.5px] text-night-200 font-bold">7日平均スコア</p></div>
+            <div><p className="text-[22px] font-bold text-cream-50 tabular">{logs7.length ? avg(logs7.map(l => sleepHours(l.bed, l.wake))).toFixed(1) : '−'}<span className="text-[10px]">h</span></p><p className="text-[9.5px] text-night-200 font-bold">平均睡眠時間</p></div>
+          </div>
+          {assess && assess.worst.length > 0 && (
+            <p className="text-[11px] text-night-100 mt-3 pt-3 border-t border-night-500/40">重点カテゴリ：{assess.worst.map(id => { const c = ASSESS_CATS.find(x => x.id === id); return `${c.name}（${assess.cats[id]}点）`; }).join('・')}</p>
+          )}
+          {counsel && <p className="text-[11px] text-night-100 mt-1.5">カウンセリング表：{fmtMD(counsel.date)} 送信ずみ（スタッフ側でAI分析ずみ）</p>}
+          {recs[0] && <p className="text-[11px] text-night-100 mt-1.5">最新の気づき：{recs[0].issue.label}（{recs[0].issue.evidence}）</p>}
+        </div>
+      </div>
+
+      {/* 本診断 */}
+      <div className="px-4 mt-3">
+        <button onClick={() => nav('assess')} className="btn-press w-full card p-3.5 flex items-center gap-3 text-left">
+          <IconTile name="flask" size={40} iconSize={19} tone="gold" />
+          <span className="flex-1">
+            <span className="block text-[13.5px] font-bold text-cream-50">{assess ? `本診断 ${assess.total}点（ランク${assess.level.rank}）` : '本診断（30問）を受ける'}</span>
+            <span className="block text-[10.5px] text-night-200 mt-0.5">{assess ? `${fmtMD(assess.date)} 実施 ・ やりなおしOK` : '5つの角度から原因を特定します（約8分）'}</span>
+          </span>
+          <Icon name="arrowR" size={15} className="text-moon-400" />
+        </button>
+      </div>
+
+      {/* 施術前後の比較 */}
+      {hasPair && (
+        <div className="px-4 mt-3">
+          <button onClick={() => nav('postureCompare')} className="btn-press w-full card p-3.5 flex items-center gap-3 text-left">
+            <IconTile name="compare" size={40} iconSize={19} />
+            <span className="flex-1">
+              <span className="block text-[13.5px] font-bold text-cream-50">施術前後のからだ比較</span>
+              <span className="block text-[10.5px] text-night-200 mt-0.5">姿勢スコアのBEFORE / AFTERを大きな画面で</span>
+            </span>
+            <Icon name="arrowR" size={15} className="text-moon-400" />
+          </button>
+        </div>
+      )}
+
+      {/* おすすめ施術（本診断から） */}
+      {proposal && proposal.treatments.length > 0 && (
+        <div className="px-4 mt-4">
+          <SectionTitle icon="heart" en="Recommended Care" title="あなたにおすすめの施術" sub="本診断の弱点カテゴリにもとづく提案です" />
+          <div className="card p-4">
+            {proposal.treatments.map((tr, i) => (
+              <p key={i} className="text-[12.5px] font-bold text-cream-50 py-1.5 border-b border-night-500/40 last:border-0 flex items-center gap-2">
+                <Icon name="check" size={14} className="text-moon-300" strokeWidth={2.2} />{tr}
+              </p>
+            ))}
+            {proposal.serious && <p className="text-[11px] text-[#f0968c] font-bold mt-2.5">お疲れサインが強めです。回数券やプランでの定期ケアをスタッフにご相談ください。</p>}
+          </div>
+        </div>
+      )}
+
+      {/* 商品体験 */}
+      {recProductIds.length > 0 && (
+        <div className="px-4 mt-4">
+          <SectionTitle icon="bag" en="Try In Store" title="店内で体験できるアイテム" sub="ショーケースで実物にふれてみてください" />
+          <div className="flex flex-col gap-1.5">
+            {recProductIds.map(id => {
+              const p = PRODUCT[id];
+              return (
+                <button key={id} onClick={() => nav('product', { id })} className="btn-press card p-3 flex items-center gap-3 text-left">
+                  <IconTile name={p.icon} size={40} iconSize={19} />
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-[12.5px] font-bold text-cream-50 truncate">{p.name}</span>
+                    <span className="block text-[10.5px] text-moon-300 font-bold">{yen(p.price)}</span>
+                  </span>
+                  <Icon name="arrowR" size={14} className="text-night-300" />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <p className="px-4 mt-4 text-[10.5px] text-night-300 leading-relaxed">ご自宅では「じたくモード」に切り替えると、睡眠記録・きょうやること・ホームケア中心の画面になります。</p>
+    </div>
+  );
+}
+
 function HomeScreen() {
   const { state, update, nav } = useApp();
   const t = todayStr();
   const todayLog = state.sleepLogs[t];
-  const lastLog = recentLogs(state, 1)[0];
   const remaining = ticketRemaining(state);
   const streak = calcStreak(state);
   const mood = soupyMoodOf(state);
@@ -1726,14 +2195,19 @@ function HomeScreen() {
   const hour = new Date().getHours();
   const greet = hour < 4 ? 'こんばんは' : hour < 11 ? 'おはようございます' : hour < 18 ? 'こんにちは' : 'こんばんは';
   const { lv } = levelFromXp(state.soupy.xp);
+  const isStore = state.mode === 'store';
 
+  const friendship = friendshipOf(state);
   const bubbles = [];
   if (!todayLog && hour >= 5) bubbles.push('ゆうべはねむれた？きろくを見せてほしいな');
   if (recs[0]) bubbles.push(recs[0].msg);
   if (remaining > 0) bubbles.push(`回数券はあと${remaining}回分あるよ。つぎはいつ来てくれる？`);
   if (streak >= 3) bubbles.push(`${streak}日れんぞくで記録中！すごい！ぼくもうれしい〜`);
+  if (friendship >= 3) bubbles.push('いつもなでてくれてありがとう。きみのがんばり、ぼくがいちばん知ってるよ');
+  if (friendship >= 4) bubbles.push('ねぇねぇ、こんど月のうえでピクニックしようね');
+  if (friendship >= 5) bubbles.push('きみはぼくのいちばんのともだち！ずっといっしょに整えようね');
   if (!bubbles.length) bubbles.push('ぐっすりねむれるからだ、いっしょにつくろうね');
-  const bubble = bubbles[new Date().getDate() % bubbles.length];
+  const bubble = isStore ? 'ようこそSLEEPYへ！きょうもいっしょに整えよう' : bubbles[new Date().getDate() % bubbles.length];
 
   const pet = () => {
     if (xpCountToday(state, 'なでなで') >= 5) return;
@@ -1749,23 +2223,26 @@ function HomeScreen() {
           onError={e => { e.currentTarget.style.display = 'none'; }} />
         <div className="flex-1">
           <p className="text-[10.5px] text-night-200 font-bold">睡眠整体サロン SLEEPY</p>
-          <p className="text-[15px] font-bold text-cream-50">{greet}、{state.profile.name || 'ゲスト'}さん{state.accountStatus === 'guest' && <span className="ml-1.5 text-[9px] font-bold text-night-200 border border-night-400/60 rounded-[5px] px-1.5 py-0.5 align-[2px]">ゲスト</span>}</p>
+          <p className="text-[16px] font-bold text-cream-50">{greet}、{state.profile.name || 'ゲスト'}さん{state.accountStatus === 'guest' && <span className="ml-1.5 text-[9px] font-bold text-night-200 border border-night-400/60 rounded-[5px] px-1.5 py-0.5 align-[2px]">ゲスト</span>}</p>
         </div>
-        <button onClick={() => nav('member')} className="btn-press relative w-10 h-10 rounded-full bg-night-600 border border-night-400/50 flex items-center justify-center text-[16px]" aria-label="会員証">
-          <Icon name="ticket" size={17} className="text-cream-100" />
+        <button onClick={() => nav('member')} className="btn-press relative w-11 h-11 rounded-full bg-night-600 border border-night-400/50 flex items-center justify-center" aria-label="会員証">
+          <Icon name="ticket" size={18} className="text-cream-100" />
           {remaining > 0 && <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-moon-400 text-night-900 text-[10px] font-bold flex items-center justify-center">{remaining}</span>}
         </button>
-        <button onClick={() => nav('settings')} className="btn-press w-10 h-10 rounded-full bg-night-600 border border-night-400/50 flex items-center justify-center" aria-label="設定"><Icon name="gear" size={17} className="text-cream-100" /></button>
+        <button onClick={() => nav('settings')} className="btn-press w-11 h-11 rounded-full bg-night-600 border border-night-400/50 flex items-center justify-center" aria-label="設定"><Icon name="gear" size={18} className="text-cream-100" /></button>
       </div>
 
+      {/* モード切り替え */}
+      <div className="px-4 mt-1"><ModeSwitch /></div>
+
       {/* スーピーくんヒーロー */}
-      <div className="px-4 mt-1">
+      <div className="px-4 mt-3">
         <NightSky className="rounded-[14px] border border-night-500/60" dense>
           <div className="px-4 pt-4">
             <SpeechBubble text={bubble} />
           </div>
-          <div className="flex items-end justify-center pb-1 pt-1">
-            <Soupy3DOrSvg size={196} mood={mood} wearing={state.soupy.wearing} onTap={pet} scene="moon" title="スーピーくんをなでる" />
+          <div className="flex items-end justify-center pb-1">
+            <Soupy3DOrSvg size={168} mood={mood} wearing={state.soupy.wearing} onTap={pet} scene="moon" title="スーピーくんをなでる" />
           </div>
           <div className="flex items-center justify-center gap-2 pb-3">
             <span className="text-[10.5px] font-bold px-2.5 py-1 rounded-full bg-night-900/60 text-moon-300 border border-moon-400/30">Lv.{lv} {stageTitle(lv)}</span>
@@ -1774,151 +2251,97 @@ function HomeScreen() {
         </NightSky>
       </div>
 
-      {/* 次回のご予約 */}
-      {state.nextReservation && state.nextReservation.date >= t && (
-        <div className="px-4 mt-3">
-          <button onClick={() => nav('member')} className="btn-press w-full card p-3 flex items-center gap-3 text-left">
-            <Icon name="calendar" size={17} className="text-moon-300 shrink-0" />
-            <span className="flex-1 text-[12px] font-bold text-cream-50">次回のご予約：{fmtMDW(state.nextReservation.date)} {state.nextReservation.time}</span>
-            <Icon name="arrowR" size={14} className="text-night-300" />
-          </button>
-        </div>
-      )}
+      {isStore ? <StoreHome /> : (
+        <div>
+          {/* ① きょうの状態 */}
+          <div className="px-4 mt-3">
+            <TodayConditionCard />
+          </div>
 
-      {/* 来店フロー再開バナー */}
-      {state.visitFlow && (
-        <div className="px-4 mt-3">
-          <button onClick={() => nav('visit')} className="btn-press w-full card p-3.5 flex items-center gap-3 border-moon-400/40" style={{ borderColor: 'rgba(246,217,126,.35)' }}>
-            <IconTile name="building" size={38} iconSize={18} tone="gold" />
-            <span className="flex-1 text-left">
-              <span className="block text-[13px] font-bold text-cream-50">ご来店中：本日の流れをつづける</span>
-              <span className="block text-[10.5px] text-night-200">タップして来店ガイドにもどる</span>
-            </span>
-            <span className="text-moon-400 font-bold">→</span>
-          </button>
-        </div>
-      )}
+          {/* ② きょうやること */}
+          <div className="px-4 mt-4">
+            <TodayPlanCard />
+          </div>
 
-      {/* ステータス列 */}
-      <div className="px-4 mt-3 grid grid-cols-3 gap-2.5">
-        <button onClick={() => nav('sleep')} className="btn-press card p-3 flex flex-col items-center">
-          {lastLog
-            ? <ScoreRing score={lastLog.score} size={84} sub={fmtMD(lastLog.date)} showLabel={false} />
-            : <div className="h-[84px] flex flex-col items-center justify-center"><Icon name="moon" size={24} className="text-night-300" /><span className="text-[10px] text-night-200 mt-1 font-bold">未記録</span></div>}
-          <span className="text-[10px] font-bold text-night-200 mt-1.5">睡眠スコア</span>
-        </button>
-        <button onClick={() => nav('member')} className="btn-press card p-3 flex flex-col items-center justify-center">
-          <span className="text-[30px] leading-none font-bold text-cream-50 mt-3">{remaining}<span className="text-[11px] text-night-200 font-bold">回</span></span>
-          <span className="text-[9.5px] text-night-300 mt-1">のこり</span>
-          <span className="text-[10px] font-bold text-night-200 mt-2.5">回数券ざんだか</span>
-        </button>
-        <button onClick={() => nav('sleep')} className="btn-press card p-3 flex flex-col items-center justify-center">
-          <span className="text-[30px] leading-none font-bold text-cream-50 mt-3">{streak}<span className="text-[11px] text-night-200 font-bold">日</span></span>
-          <span className="text-[9.5px] text-night-300 mt-1">れんぞく</span>
-          <span className="text-[10px] font-bold text-night-200 mt-2.5">きろく継続</span>
-        </button>
-      </div>
-
-      {/* いまのホームケア処方（来店時に1〜3点処方） */}
-      {state.prescription && state.prescription.until >= t && (
-        <div className="px-4 mt-3">
-          <div className="card p-3.5">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-[12px] font-bold text-cream-50"><Icon name="pill" size={13} className="mr-1 text-moon-300 align-[-2px]" />いまのホームケア処方</p>
-              <span className="text-[9.5px] text-night-300 font-bold">{fmtMD(state.prescription.until)}まで</span>
+          {/* 来店フロー再開（店内モードに戻る導線） */}
+          {state.visitFlow && (
+            <div className="px-4 mt-3">
+              <button onClick={() => nav('visit')} className="btn-press w-full card p-3.5 flex items-center gap-3" style={{ borderColor: 'rgba(246,217,126,.35)' }}>
+                <IconTile name="building" size={38} iconSize={18} tone="gold" />
+                <span className="flex-1 text-left">
+                  <span className="block text-[13px] font-bold text-cream-50">ご来店中：本日の流れをつづける</span>
+                  <span className="block text-[10.5px] text-night-200">タップして来店ガイドにもどる</span>
+                </span>
+                <span className="text-moon-400 font-bold">→</span>
+              </button>
             </div>
-            <div className="flex flex-wrap gap-1.5">
-              {state.prescription.items.map(id => {
-                const s = STRETCH[id], p = PRODUCT[id];
-                return (
-                  <Chip key={id} onClick={() => s ? nav('stretchPlay', { id }) : nav('product', { id })}>
-                    {s ? <><Icon name={s.icon} size={13} className="mr-1 text-moon-300 align-[-2px]" />{s.name}</> : p ? <><Icon name={p.icon} size={13} className="mr-1 text-moon-300 align-[-2px]" />{p.name}</> : id}
-                  </Chip>
-                );
-              })}
+          )}
+
+          {/* 購入後フォロー */}
+          <div className="px-4 mt-3 empty:mt-0"><FollowupCard /></div>
+
+          {/* カウンセリング表CTA（未記入の方向け） */}
+          {!(state.counselings || []).length && (
+            <div className="px-4 mt-3">
+              <button onClick={() => nav('counseling')} className="btn-press w-full card p-3.5 flex items-center gap-3 text-left">
+                <IconTile name="file" size={38} iconSize={18} tone="gold" />
+                <span className="flex-1">
+                  <span className="block text-[13px] font-bold text-cream-50">ご来店前カウンセリング表</span>
+                  <span className="block text-[10.5px] text-night-200">3分で入力 → ご来店がスムーズに（+20 XP）</span>
+                </span>
+                <Icon name="arrowR" size={16} className="text-moon-400" />
+              </button>
             </div>
+          )}
+
+          {/* 診断CTA（未診断の方向け） */}
+          {!state.quickChecks.length && !state.assessments.length && (
+            <div className="px-4 mt-3">
+              <button onClick={() => nav('quick')} className="btn-press w-full card p-3.5 flex items-center gap-3 text-left">
+                <IconTile name="clipboard" size={38} iconSize={18} tone="gold" />
+                <span className="flex-1">
+                  <span className="block text-[13px] font-bold text-cream-50">3分でわかる、ねむりの現在地</span>
+                  <span className="block text-[10.5px] text-night-200">かんたんAI睡眠診断（8問）＋15 XP</span>
+                </span>
+                <span className="text-moon-400 font-bold">→</span>
+              </button>
+            </div>
+          )}
+
+          {/* お知らせ（1枠のみ） */}
+          <div className="px-4 mt-3 empty:mt-0"><HomeBanner /></div>
+
+          {/* クイックアクション（じたくで使うものだけに絞る） */}
+          <div className="px-4 mt-4 grid grid-cols-4 gap-2">
+            {[
+              { icon: 'clipboard', label: 'かんたん診断', go: () => nav('quick') },
+              { icon: 'camera', label: '姿勢分析', go: () => nav('posture') },
+              { icon: 'headphones', label: 'サウンド', go: () => nav('sounds') },
+              { icon: 'bulb', label: 'まなぶ', go: () => nav('care', { tab: 'learn' }) },
+            ].map((a, i) => (
+              <button key={i} onClick={a.go} className="btn-press card-deep p-3 flex flex-col items-center gap-1.5">
+                <Icon name={a.icon} size={22} className="text-moon-300" strokeWidth={1.55} />
+                <span className="text-[10.5px] font-bold text-night-100">{a.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* スーピーくんの気づき */}
+          <div className="px-4 mt-4">
+            <SectionTitle icon="bulb" en="Insights" title="スーピーくんの気づき" sub="睡眠記録と姿勢分析から自動で提案します" />
+            {recs.length > 0 ? (
+              <div className="flex flex-col gap-2.5">
+                {recs.slice(0, 2).map((r, i) => <RecCard key={i} rec={r} />)}
+              </div>
+            ) : (
+              <div className="card p-4 flex items-center gap-3">
+                <Soupy size={52} mood="happy" animate={false} showZzz={false} />
+                <p className="text-[12px] font-bold text-night-100 leading-relaxed">いまのところ大きな課題はナシ！この調子で記録をつづけると、変化があったときにすぐ気づけるよ</p>
+              </div>
+            )}
           </div>
         </div>
       )}
-
-      {/* カウンセリング表CTA（未記入の方向け） */}
-      {!(state.counselings || []).length && (
-        <div className="px-4 mt-3">
-          <button onClick={() => nav('counseling')} className="btn-press w-full card p-3.5 flex items-center gap-3 text-left hairline-gold">
-            <IconTile name="file" size={38} iconSize={18} tone="gold" />
-            <span className="flex-1">
-              <span className="block text-[13px] font-bold text-cream-50">ご来店前カウンセリング表</span>
-              <span className="block text-[10.5px] text-night-200">3分で入力 → ご来店がスムーズに（+20 XP）</span>
-            </span>
-            <Icon name="arrowR" size={16} className="text-moon-400" />
-          </button>
-        </div>
-      )}
-
-      {/* 診断CTA（未診断の方向け） */}
-      {!state.quickChecks.length && !state.assessments.length && (
-        <div className="px-4 mt-3">
-          <button onClick={() => nav('quick')} className="btn-press w-full card p-3.5 flex items-center gap-3 text-left">
-            <IconTile name="clipboard" size={38} iconSize={18} tone="gold" />
-            <span className="flex-1">
-              <span className="block text-[13px] font-bold text-cream-50">3分でわかる、ねむりの現在地</span>
-              <span className="block text-[10.5px] text-night-200">かんたんAI睡眠診断（8問）＋15 XP</span>
-            </span>
-            <span className="text-moon-400 font-bold">→</span>
-          </button>
-        </div>
-      )}
-
-      {/* クイックアクション */}
-      <div className="px-4 mt-3 grid grid-cols-4 gap-2">
-        {[
-          { icon: 'pencil', label: '睡眠を記録', go: () => nav('sleep', { open: true }) },
-          { icon: 'camera', label: '姿勢レポート', go: () => nav('posture') },
-          { icon: 'building', label: '来店ガイド', go: () => nav('visit') },
-          { icon: 'stretch', label: 'ストレッチ', go: () => nav('care') },
-          { icon: 'clipboard', label: 'かんたん診断', go: () => nav('quick') },
-          { icon: 'flask', label: '本診断30問', go: () => nav('assess') },
-          { icon: 'headphones', label: 'サウンド', go: () => nav('sounds') },
-          { icon: 'bulb', label: 'まなぶ', go: () => nav('care', { tab: 'learn' }) },
-        ].map((a, i) => (
-          <button key={i} onClick={a.go} className="btn-press card-deep p-3 flex flex-col items-center gap-1.5">
-            <Icon name={a.icon} size={21} className="text-moon-300" strokeWidth={1.55} />
-            <span className="text-[10px] font-bold text-night-100">{a.label}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* 自律神経バランス（最新） */}
-      {lastLog && (
-        <div className="px-4 mt-4">
-          <SectionTitle icon="scales" en="Autonomic Balance" title="自律神経バランス" sub={`${fmtMDW(lastLog.date)} の記録から推定`}
-            right={<button onClick={() => nav('article', { id: 'a_ans' })} className="text-[11px] font-bold text-moon-300">しくみを知る →</button>} />
-          <div className="card p-4">
-            <BalanceGauge value={lastLog.balance ?? calcAutonomic(lastLog)} />
-          </div>
-        </div>
-      )}
-
-      {/* 今日のミッション */}
-      <div className="px-4 mt-4">
-        <SectionTitle icon="star" en="Daily Missions" title="きょうのミッション" sub="クリアするとスーピーくんが育ちます" />
-        <MissionList />
-      </div>
-
-      {/* あなたへのおすすめ */}
-      <div className="px-4 mt-4">
-        <SectionTitle icon="bulb" en="Insights" title="スーピーくんの気づき" sub="睡眠記録と姿勢分析から自動で提案します" />
-        {recs.length > 0 ? (
-          <div className="flex flex-col gap-2.5">
-            {recs.slice(0, 2).map((r, i) => <RecCard key={i} rec={r} />)}
-          </div>
-        ) : (
-          <div className="card p-4 flex items-center gap-3">
-            <Soupy size={52} mood="happy" animate={false} showZzz={false} />
-            <p className="text-[12px] font-bold text-night-100 leading-relaxed">いまのところ大きな課題はナシ！この調子で記録をつづけると、変化があったときにすぐ気づけるよ</p>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
@@ -2076,6 +2499,7 @@ function SleepScreen({ route }) {
   const trend = logs7.map(l => ({ date: l.date, score: l.score }));
   const hoursData = logs7.map(l => ({ date: l.date, hours: sleepHours(l.bed, l.wake) }));
   const allDates = Object.keys(state.sleepLogs).sort().reverse().slice(0, 14);
+  const feedback = useMemo(() => weekCompare(state), [state]);
 
   const save = (date, data) => {
     const log = { ...data };
@@ -2097,17 +2521,6 @@ function SleepScreen({ route }) {
           <p className="text-[11px] text-night-200 mt-0.5">ねむりを見える化して、自律神経を整えよう</p>
         </div>
         <Soupy size={54} mood="sleep" animate={false} />
-      </div>
-
-      <div className="px-4 mt-3">
-        <button onClick={() => nav('health')} className="btn-press w-full card p-3.5 flex items-center gap-3 text-left">
-          <IconTile name="watch" size={38} iconSize={18} tone="gold" />
-          <span className="flex-1">
-            <span className="block text-[13px] font-bold text-cream-50">スマホの睡眠データを取り込む</span>
-            <span className="block text-[10.5px] text-night-200">Apple ヘルスケア / CSV ・ 手入力もOK</span>
-          </span>
-          <Icon name="arrowR" size={16} className="text-moon-400" />
-        </button>
       </div>
 
       {/* 今日の記録 */}
@@ -2134,6 +2547,48 @@ function SleepScreen({ route }) {
         )}
       </div>
 
+      {/* スーピーくんのAIフィードバック（今週の変化 → 次の一手）役員FB③ */}
+      <div className="px-4 mt-4">
+        <SectionTitle icon="sparkle" en="Weekly AI Feedback" title="スーピーくんの週間分析" sub="直近7日とその前の7日をくらべています" />
+        <div className="card p-4">
+          <div className="flex gap-3 items-start">
+            <Soupy size={48} mood={feedback.enough ? 'happy' : 'sleep'} animate={false} showZzz={false} className="shrink-0" />
+            <div className="flex-1 min-w-0">
+              {feedback.lines.map((l, i) => (
+                <p key={i} className="text-[12.5px] text-night-50 leading-relaxed mb-1.5 last:mb-0">{l}</p>
+              ))}
+            </div>
+          </div>
+          {feedback.focus && (
+            <div className="card-deep p-3.5 mt-3">
+              <p className="text-[10.5px] font-bold text-moon-300 mb-1"><Icon name="flag" size={12} className="mr-1 align-[-2px]" />今週のフォーカス：{feedback.focus.issue.label}</p>
+              <p className="text-[12px] text-night-100 leading-relaxed">{feedback.focus.recipe.msg}</p>
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {(feedback.focus.recipe.stretch || []).slice(0, 1).map(id => STRETCH[id] && (
+                  <Chip key={id} onClick={() => nav('stretchPlay', { id })}><Icon name={STRETCH[id].icon} size={13} className="mr-1 text-moon-300 align-[-2px]" />{STRETCH[id].name}</Chip>
+                ))}
+                {(feedback.focus.recipe.article || []).slice(0, 1).map(id => {
+                  const a = ARTICLES.find(x => x.id === id);
+                  return a ? <Chip key={id} onClick={() => nav('article', { id })}><Icon name={a.icon} size={13} className="mr-1 text-moon-300 align-[-2px]" />{a.title}</Chip> : null;
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* つづけるカレンダー */}
+      <div className="px-4 mt-3">
+        <button onClick={() => nav('calendar')} className="btn-press w-full card p-3.5 flex items-center gap-3 text-left">
+          <IconTile name="calendar" size={38} iconSize={18} tone="gold" />
+          <span className="flex-1">
+            <span className="block text-[13px] font-bold text-cream-50">つづけるカレンダー</span>
+            <span className="block text-[10.5px] text-night-200">記録・ストレッチ・入浴・来店のスタンプがたまります</span>
+          </span>
+          <Icon name="arrowR" size={16} className="text-moon-400" />
+        </button>
+      </div>
+
       {/* チャート */}
       <div className="px-4 mt-4">
         <SectionTitle icon="chart" en="Sleep Trend" title="睡眠スコアの推移" sub="この7日間" />
@@ -2148,8 +2603,8 @@ function SleepScreen({ route }) {
         </div>
       </div>
 
-      {/* おやすみサウンド */}
-      <div className="px-4 mt-3">
+      {/* おやすみサウンド・ヘルスケア連携 */}
+      <div className="px-4 mt-3 flex flex-col gap-2">
         <button onClick={() => nav('sounds')} className="btn-press w-full card p-3.5 flex items-center gap-3 text-left">
           <IconTile name="headphones" size={38} iconSize={18} tone="gold" />
           <span className="flex-1">
@@ -2157,6 +2612,14 @@ function SleepScreen({ route }) {
             <span className="block text-[10.5px] text-night-200">528Hz・シータ波・雨音｜タイマー付き</span>
           </span>
           <span className="text-moon-400 font-bold">→</span>
+        </button>
+        <button onClick={() => nav('health')} className="btn-press w-full card p-3.5 flex items-center gap-3 text-left">
+          <IconTile name="watch" size={38} iconSize={18} />
+          <span className="flex-1">
+            <span className="block text-[13px] font-bold text-cream-50">スマホの睡眠データを取り込む</span>
+            <span className="block text-[10.5px] text-night-200">Apple ヘルスケア / CSV ・ 手入力もOK</span>
+          </span>
+          <Icon name="arrowR" size={16} className="text-moon-400" />
         </button>
       </div>
 
@@ -2214,6 +2677,141 @@ function SleepScreen({ route }) {
 }
 
 /* ============================================================
+   SECTION 10.5: つづけるカレンダー（継続の見える化）役員FB⑨
+   ============================================================ */
+const STAMP_DEFS = [
+  { id: 'log',     icon: 'moon',     label: 'すいみん記録', color: '#f6d97e' },
+  { id: 'stretch', icon: 'stretch',  label: 'ストレッチ',   color: '#6d82ec' },
+  { id: 'bath',    icon: 'bath',     label: 'おふろ',       color: '#25a08c' },
+  { id: 'visit',   icon: 'building', label: 'ご来店',       color: '#f5b0a0' },
+  { id: 'shop',    icon: 'bag',      label: 'おかいもの',   color: '#8b96b8' },
+];
+function dayStamps(state, d) {
+  const s = [];
+  if (state.sleepLogs[d]) s.push('log');
+  if ((state.stretchLog || []).some(x => x.date === d)) s.push('stretch');
+  if ((state.sleepLogs[d]?.habits || []).includes('bath')) s.push('bath');
+  if ((state.visits || []).some(v => v.date === d)) s.push('visit');
+  if ((state.orders || []).some(o => o.date === d)) s.push('shop');
+  return s;
+}
+function CalendarScreen() {
+  const { state, back } = useApp();
+  const t = todayStr();
+  const [ym, setYm] = useState(t.slice(0, 7)); // 'YYYY-MM'
+  const [openDay, setOpenDay] = useState(null);
+  const [y, m] = ym.split('-').map(Number);
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const firstDow = new Date(y, m - 1, 1).getDay();
+  const dates = Array.from({ length: daysInMonth }, (_, i) => `${y}-${pad2(m)}-${pad2(i + 1)}`);
+  const moveMonth = (d) => {
+    const nd = new Date(y, m - 1 + d, 1);
+    setYm(`${nd.getFullYear()}-${pad2(nd.getMonth() + 1)}`);
+  };
+  const streak = calcStreak(state);
+  const counts = Object.fromEntries(STAMP_DEFS.map(s => [s.id, 0]));
+  dates.forEach(d => dayStamps(state, d).forEach(id => { counts[id]++; }));
+  const elapsed = dates.filter(d => d <= t).length;
+  const rate = elapsed ? Math.round(counts.log / elapsed * 100) : 0;
+  const isThisMonth = ym === t.slice(0, 7);
+
+  return (
+    <div className="min-h-screen">
+      <BackHeader title="つづけるカレンダー" onBack={back} />
+      <div className="p-4 pb-8">
+        <div className="card-deep p-3.5 flex gap-2.5 items-center">
+          <Soupy size={44} mood={streak >= 3 ? 'happy' : 'sleep'} animate={false} showZzz={false} />
+          <p className="font-maru text-[11.5px] text-night-100 leading-relaxed font-bold">
+            {streak >= 3 ? `${streak}日れんぞく記録中！このカレンダーが、がんばりの証だよ` : 'スタンプがたまると、がんばりがひと目でわかるよ。まずは3日つづけてみよう！'}
+          </p>
+        </div>
+
+        {/* 今月のサマリー */}
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          <div className="card p-3 text-center">
+            <p className="text-[24px] leading-none font-bold text-moon-300 tabular">{streak}<span className="text-[11px] text-night-200">日</span></p>
+            <p className="text-[10px] font-bold text-night-200 mt-1.5">れんぞく記録</p>
+          </div>
+          <div className="card p-3 text-center">
+            <p className="text-[24px] leading-none font-bold text-cream-50 tabular">{counts.log}<span className="text-[11px] text-night-200">日</span></p>
+            <p className="text-[10px] font-bold text-night-200 mt-1.5">今月の記録</p>
+          </div>
+          <div className="card p-3 text-center">
+            <p className="text-[24px] leading-none font-bold text-cream-50 tabular">{isThisMonth ? rate : Math.round(counts.log / daysInMonth * 100)}<span className="text-[11px] text-night-200">%</span></p>
+            <p className="text-[10px] font-bold text-night-200 mt-1.5">記録達成率</p>
+          </div>
+        </div>
+
+        {/* 月ナビ + カレンダー本体 */}
+        <div className="card p-4 mt-3">
+          <div className="flex items-center justify-between mb-3">
+            <button onClick={() => moveMonth(-1)} className="btn-press w-9 h-9 rounded-full bg-night-600 flex items-center justify-center" aria-label="前の月">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            </button>
+            <p className="text-[15px] font-bold text-cream-50">{y}年{m}月</p>
+            <button onClick={() => moveMonth(1)} disabled={isThisMonth} className={`btn-press w-9 h-9 rounded-full bg-night-600 flex items-center justify-center ${isThisMonth ? 'opacity-30 pointer-events-none' : ''}`} aria-label="次の月">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            </button>
+          </div>
+          <div className="grid grid-cols-7 gap-1 text-center mb-1">
+            {WD.map((w, i) => <span key={w} className={`text-[10px] font-bold ${i === 0 ? 'text-[#f0968c]' : i === 6 ? 'text-[#a5b4f5]' : 'text-night-200'}`}>{w}</span>)}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {Array.from({ length: firstDow }).map((_, i) => <span key={'e' + i} />)}
+            {dates.map(d => {
+              const stamps = dayStamps(state, d);
+              const isToday = d === t;
+              const future = d > t;
+              return (
+                <button key={d} onClick={() => !future && stamps.length && setOpenDay(d)}
+                  className={`rounded-[9px] border p-1 pb-1.5 min-h-[46px] flex flex-col items-center gap-0.5 ${isToday ? 'border-moon-400/70 bg-moon-400/10' : 'border-night-500/40 bg-night-700/40'} ${future ? 'opacity-30' : ''}`}>
+                  <span className={`text-[10.5px] font-bold tabular ${isToday ? 'text-moon-300' : 'text-night-100'}`}>{Number(d.slice(-2))}</span>
+                  <span className="flex flex-wrap justify-center gap-[2px] leading-none">
+                    {stamps.slice(0, 4).map(id => {
+                      const def = STAMP_DEFS.find(x => x.id === id);
+                      return <span key={id} className="w-[7px] h-[7px] rounded-full" style={{ background: def.color }} />;
+                    })}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex flex-wrap gap-x-3 gap-y-1 mt-3 pt-3 border-t border-night-500/40">
+            {STAMP_DEFS.map(s => (
+              <span key={s.id} className="inline-flex items-center gap-1.5 text-[10px] font-bold text-night-100">
+                <span className="w-[7px] h-[7px] rounded-full" style={{ background: s.color }} />{s.label}
+                <span className="text-night-300">{counts[s.id]}{s.id === 'log' || s.id === 'bath' ? '日' : '回'}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <p className="text-[10.5px] text-night-300 mt-3 leading-relaxed">スタンプは、睡眠記録・ストレッチ完了・行動チェックの「湯船」・ご来店チェックイン・お買いものから自動でつきます。</p>
+      </div>
+
+      <Modal open={!!openDay} onClose={() => setOpenDay(null)} title={openDay ? fmtJP(openDay) : ''}>
+        {openDay && (
+          <div>
+            <div className="flex flex-col gap-1.5">
+              {dayStamps(state, openDay).map(id => {
+                const def = STAMP_DEFS.find(x => x.id === id);
+                return (
+                  <p key={id} className="card-deep px-3.5 py-2.5 text-[12.5px] font-bold text-cream-50 flex items-center gap-2.5">
+                    <Icon name={def.icon} size={16} style={{ color: def.color }} />{def.label}
+                    {id === 'log' && state.sleepLogs[openDay] && <span className="ml-auto text-moon-300">{state.sleepLogs[openDay].score}点</span>}
+                  </p>
+                );
+              })}
+            </div>
+            <div className="mt-4"><Btn kind="primary" full onClick={() => setOpenDay(null)}>とじる</Btn></div>
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
+/* ============================================================
    SECTION 11: そだてる画面（スーピーくん育成）
    ============================================================ */
 function SoupyScreen() {
@@ -2222,7 +2820,7 @@ function SoupyScreen() {
   const mood = soupyMoodOf(state);
   const petsToday = xpCountToday(state, 'なでなで');
   const totalPets = (state.xpLog || []).filter(x => x.reason === 'なでなで').length;
-  const friendship = Math.min(5, 1 + Math.floor(totalPets / 15));
+  const friendship = friendshipOf(state);
 
   const pet = () => {
     if (petsToday >= 5) { toast('きょうはもうおなかいっぱい…また明日なでてね'); return; }
@@ -2273,6 +2871,33 @@ function SoupyScreen() {
           <p className="text-[18px] mt-1">{mood === 'happy' ? 'ごきげん' : mood === 'tired' ? 'おつかれ' : 'すやすや'}</p>
           <p className="text-[9.5px] text-night-300 mt-1">最近の睡眠スコアで変化</p>
         </div>
+      </div>
+
+      {/* つぎのごほうび（貯めると何が起こるかの見える化）役員FB⑫ */}
+      <div className="px-4 mt-4">
+        <SectionTitle icon="gift" en="Next Rewards" title="つぎのごほうび" sub="XPとなかよし度で、こんなことが起こります" />
+        <div className="card p-2">
+          {(() => {
+            const rows = [];
+            const nextAcc = ACCESSORIES.find(a => a.lv > lv);
+            if (nextAcc) rows.push({ icon: nextAcc.icon, label: `きせかえ「${nextAcc.name}」`, sub: `Lv.${nextAcc.lv}でかいほう`, rest: `あと${xpForLevel(nextAcc.lv) - state.soupy.xp} XP` });
+            const nextStage = STAGES.find(s => s.min > lv);
+            if (nextStage) rows.push({ icon: 'crown', label: `称号「${nextStage.title}」`, sub: `Lv.${nextStage.min}でかいほう`, rest: `あと${xpForLevel(nextStage.min) - state.soupy.xp} XP` });
+            if (friendship < 5) rows.push({ icon: 'heart', label: 'ホームのおしゃべりがふえる', sub: `なかよし度${friendship + 1}でかいほう`, rest: `あと${Math.max(1, friendship * 15 - totalPets)}回なでる` });
+            if (!rows.length) rows.push({ icon: 'sparkle', label: 'ぜんぶのごほうびを獲得ずみ！', sub: 'すごい！これからも一緒に整えよう', rest: '' });
+            return rows.map((r, i) => (
+              <div key={i} className="flex items-center gap-3 px-3 py-2.5 border-b border-night-500/40 last:border-0">
+                <IconTile name={r.icon} size={36} iconSize={17} tone="gold" />
+                <span className="flex-1 min-w-0">
+                  <span className="block text-[12.5px] font-bold text-cream-50">{r.label}</span>
+                  <span className="block text-[10px] text-night-300">{r.sub}</span>
+                </span>
+                {r.rest && <span className="text-[11px] font-bold text-moon-300 shrink-0">{r.rest}</span>}
+              </div>
+            ));
+          })()}
+        </div>
+        <p className="text-[10px] text-night-300 mt-2 leading-relaxed">店舗でつかえる特典やスーピーくんのお部屋づくりも準備中。おたのしみに！</p>
       </div>
 
       {/* ミッション */}
@@ -2694,23 +3319,61 @@ function RegistrationModal({ open, onClose, onDone }) {
 
 function cartCount(state) { return (state.cart || []).reduce((a, c) => a + c.qty, 0); }
 
-/* 定額プラン・サブスク（設計図⑪） */
+/* 定額プラン・サブスク（設計図⑪ + 役員FB⑱: 料金表ではなく「あなたへのおすすめ」） */
 function SubsSection() {
-  const { state, update } = useApp();
+  const { state, update, nav } = useApp();
   const [join, setJoin] = useState(null);
   const [reg, setReg] = useState(false);
   const [pendingJoin, setPendingJoin] = useState(null);
   const current = state.subscription;
   const plan = join && SUB_PLAN[join];
+  const rec = useMemo(() => recommendPlan(state), [state]);
+  const recPlan = SUB_PLAN[rec.planId];
   return (
     <div className="px-4 mt-4">
-      <SectionTitle icon="calendar" en="Membership" title="定額プラン・サブスク" sub="続けやすい仕組みで「整う」を習慣に" />
+      <SectionTitle icon="calendar" en="Your Program" title="あなたの整えプログラム" sub="診断・睡眠データから、通いかたをご提案します" />
+
+      {/* あなたへのおすすめ（データがある場合） */}
+      {!current && rec.hasData && (
+        <div className="card p-4 mb-3 hairline-gold relative">
+          <span className="absolute -top-2 left-4 text-[9px] font-bold text-night-900 bg-moon-400 rounded-full px-2 py-0.5">いまのあなたへのおすすめ</span>
+          <div className="flex items-center gap-3 mt-1">
+            <span className="w-11 h-11 rounded-[10px] flex items-center justify-center shrink-0" style={{ background: recPlan.color + '22', color: recPlan.color }}><Icon name={recPlan.icon} size={20} /></span>
+            <div className="flex-1">
+              <p className="text-[14px] font-bold text-cream-50">{recPlan.cadence}の来店{rec.addCare ? '＋おうちでのホームケア' : ''}</p>
+              <p className="text-[11.5px] text-night-200 mt-0.5">{recPlan.name}｜{yen(recPlan.price)}/月</p>
+            </div>
+          </div>
+          {rec.why.length > 0 && (
+            <div className="mt-2.5 pt-2.5 border-t border-night-500/40">
+              {rec.why.map((w, i) => <p key={i} className="text-[11.5px] text-night-100 leading-relaxed flex items-start gap-1.5"><Icon name="info" size={12} className="text-moon-300 mt-0.5 shrink-0" />{w}ため</p>)}
+              {rec.addCare && <p className="text-[11.5px] text-night-100 leading-relaxed flex items-start gap-1.5"><Icon name="info" size={12} className="text-moon-300 mt-0.5 shrink-0" />入浴・冷え対策には「おうちケア定期便」の併用が効果的です</p>}
+            </div>
+          )}
+          <div className="mt-3 flex gap-2">
+            <Btn small kind="moon" onClick={() => setJoin(rec.planId)}>このプランで整える</Btn>
+            {rec.addCare && <Btn small kind="ghost" onClick={() => setJoin('sub_care')}>定期便も見る</Btn>}
+          </div>
+        </div>
+      )}
+      {!current && !rec.hasData && (
+        <button onClick={() => nav('assess')} className="btn-press w-full card-deep p-3.5 mb-3 flex items-center gap-2.5 text-left">
+          <Icon name="flask" size={17} className="text-moon-300 shrink-0" />
+          <span className="flex-1 text-[11.5px] font-bold text-night-100 leading-relaxed">本診断や睡眠記録のデータがたまると、あなたに合った通いかたをここでご提案します。まずは本診断から。</span>
+          <Icon name="arrowR" size={14} className="text-moon-400" />
+        </button>
+      )}
+
+      <p className="text-[11px] font-bold text-night-200 mb-2">すべてのプラン</p>
       <div className="flex flex-col gap-2.5">
         {SUB_PLANS.map(p => {
           const joined = current && current.planId === p.id;
+          const recommended = !current && rec.hasData && p.id === rec.planId;
           return (
             <div key={p.id} className={`card p-4 relative ${joined ? 'ring-2 ring-moon-400/70' : ''}`}>
-              {p.popular && <span className="absolute -top-2 right-4 text-[9px] font-bold text-night-900 bg-moon-400 rounded-full px-2 py-0.5">人気No.1</span>}
+              {recommended
+                ? <span className="absolute -top-2 right-4 text-[9px] font-bold text-night-900 bg-moon-400 rounded-full px-2 py-0.5">おすすめ</span>
+                : p.popular && <span className="absolute -top-2 right-4 text-[9px] font-bold text-night-900 bg-moon-400 rounded-full px-2 py-0.5">人気No.1</span>}
               <div className="flex items-center gap-3">
                 <span className="w-11 h-11 rounded-[10px] flex items-center justify-center" style={{ background: p.color + '22', color: p.color }}><Icon name={p.icon} size={20} /></span>
                 <div className="flex-1">
@@ -2759,10 +3422,14 @@ function SubsSection() {
 function ShopScreen({ route }) {
   const { state, update, nav } = useApp();
   const [cat, setCat] = useState('all');
+  const [concern, setConcern] = useState(route?.params?.concern || null);
   const recs = useMemo(() => buildRecommendations(state), [state]);
   const recProducts = [...new Set(recs.flatMap(r => r.product.map(id => ({ id, msg: r.msg, label: r.issue.label })).map(JSON.stringify)))].map(JSON.parse).slice(0, 3);
   const cats = ['all', ...new Set(PRODUCTS.map(p => p.cat))];
-  const shown = PRODUCTS.filter(p => cat === 'all' || p.cat === cat);
+  const activeConcern = SHOP_CONCERNS.find(c => c.id === concern);
+  const shown = activeConcern
+    ? PRODUCTS.filter(p => (p.tags || []).some(t => activeConcern.tags.includes(t)))
+    : PRODUCTS.filter(p => cat === 'all' || p.cat === cat);
   const count = cartCount(state);
 
   const add = (id) => {
@@ -2814,11 +3481,29 @@ function ShopScreen({ route }) {
         </div>
       )}
 
-      {/* 定額プラン（来店ガイドから来た場合は最上部に表示済み） */}
-      {route?.params?.view !== 'subs' && <SubsSection />}
+      {/* お悩みからえらぶ（役員FB⑯: 商品起点ではなく悩み起点） */}
+      <div className="px-4 mt-4">
+        <SectionTitle icon="search" en="By Concern" title="お悩みからえらぶ" sub="解決したいことから、ぴったりのアイテムへ" />
+        <div className="grid grid-cols-2 gap-2">
+          {SHOP_CONCERNS.map(c => (
+            <button key={c.id} onClick={() => { setConcern(concern === c.id ? null : c.id); setCat('all'); }}
+              className={`btn-press p-3 rounded-[10px] border text-left flex items-center gap-2.5 ${concern === c.id ? 'bg-moon-400/12 border-moon-400/60' : 'bg-night-600 border-night-400/40'}`}>
+              <Icon name={c.icon} size={17} className={concern === c.id ? 'text-moon-300' : 'text-night-100'} />
+              <span className="text-[11.5px] font-bold text-cream-50 leading-snug">{c.label}</span>
+            </button>
+          ))}
+        </div>
+        {activeConcern && (
+          <div className="card-deep p-3.5 mt-2.5 flex gap-2.5 items-center anim-slide-up">
+            <Soupy size={40} animate={false} showZzz={false} />
+            <p className="text-[11.5px] text-night-100 leading-relaxed font-bold">{activeConcern.note}</p>
+          </div>
+        )}
+      </div>
 
+      {/* 商品カテゴリ（従来の分類はサブ導線として残す） */}
       <div className="px-4 mt-4 flex gap-1.5 overflow-x-auto no-scrollbar">
-        {cats.map(c => <Chip key={c} active={cat === c} onClick={() => setCat(c)}>{c === 'all' ? 'すべて' : c}</Chip>)}
+        {cats.map(c => <Chip key={c} active={!activeConcern && cat === c} onClick={() => { setCat(c); setConcern(null); }}>{c === 'all' ? 'すべて' : c}</Chip>)}
       </div>
 
       <div className="px-4 mt-3 grid grid-cols-2 gap-2.5">
@@ -2833,7 +3518,11 @@ function ShopScreen({ route }) {
             <Btn small kind="ghost" className="mt-2" onClick={() => add(p.id)}><Icon name="cart" size={14} className="mr-1" />カートに入れる</Btn>
           </div>
         ))}
+        {shown.length === 0 && <div className="col-span-2 card"><EmptyState icon="bag" text="該当する商品がありません" sub="ほかのお悩み・カテゴリもみてみてね" /></div>}
       </div>
+
+      {/* 定額プラン（来店ガイドから来た場合は最上部に表示済み） */}
+      {route?.params?.view !== 'subs' && <SubsSection />}
     </div>
   );
 }
@@ -3011,6 +3700,7 @@ function CheckinModal({ open, onClose }) {
       if (useTk) { useTk.used++; useTk.history.push({ date: todayStr(), note: '睡眠整体' }); }
       st.visits.push({ id: uid(), date: todayStr(), menu: '睡眠整体', note: useTk ? `回数券使用（のこり${useTk.total - useTk.used}回）` : '都度払い' });
       gainXp(st, 50, 'ご来店');
+      st.mode = 'store';
       if (!st.visitFlow) st.visitFlow = { step: 2, startedAt: todayStr(), beforeId: null, afterId: null, prescribed: [], goalNote: '', feelBefore: null, feelAfter: null };
       else st.visitFlow.step = Math.max(st.visitFlow.step, 2);
     });
@@ -3245,17 +3935,44 @@ function MemberScreen() {
         )}
       </Modal>
 
-      {/* サブスク解約確認 */}
-      <Modal open={cancelSub} onClose={() => setCancelSub(false)}>
-        <div className="text-center py-2">
-          <Soupy size={110} mood="tired" showZzz={false} className="mx-auto" />
-          <h3 className="text-[15px] font-bold text-cream-50 mt-1">プランを解約しますか？</h3>
-          <p className="text-[11.5px] text-night-200 mt-1.5">解約すると特典（割引・優先予約など）が使えなくなります。</p>
-          <div className="mt-4 flex gap-2">
-            <Btn kind="ghost" full onClick={() => setCancelSub(false)}>つづける</Btn>
-            <Btn kind="danger" full onClick={() => { update(st => { st.subscription = null; }); setCancelSub(false); toast('プランを解約しました'); }}>解約する</Btn>
+      {/* サブスク解約（引き止めの選択肢は出すが、アプリ内で完結できることは守る） */}
+      <Modal open={!!cancelSub} onClose={() => setCancelSub(false)}>
+        {cancelSub === 'confirm' ? (
+          <div className="text-center py-2">
+            <Soupy size={110} mood="tired" showZzz={false} className="mx-auto" />
+            <h3 className="text-[15px] font-bold text-cream-50 mt-1">プランを解約しますか？</h3>
+            <p className="text-[11.5px] text-night-200 mt-1.5">解約すると特典（割引・優先予約など）が使えなくなります。<br />いつでもアプリから再加入できます。</p>
+            <div className="mt-4 flex gap-2">
+              <Btn kind="ghost" full onClick={() => setCancelSub(false)}>やめておく</Btn>
+              <Btn kind="danger" full onClick={() => { update(st => { st.subscription = null; }); setCancelSub(false); toast('プランを解約しました'); }}>解約する</Btn>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="py-1">
+            <p className="kicker">Before You Go</p>
+            <h3 className="text-[16px] font-bold text-cream-50 mt-0.5">解約のまえに、こんな方法もあります</h3>
+            <div className="mt-3 flex flex-col gap-2">
+              {sub && sub.id !== 'sub_light' && (
+                <button onClick={() => { update(st => { st.subscription = { planId: 'sub_light', since: todayStr() }; }); setCancelSub(false); toast('整えライト会員（月1回）に変更しました'); }}
+                  className="btn-press card-deep p-3.5 text-left flex items-center gap-3">
+                  <IconTile name="moon" size={38} iconSize={18} />
+                  <span className="flex-1">
+                    <span className="block text-[12.5px] font-bold text-cream-50">月1回のライトプランに変更する</span>
+                    <span className="block text-[10.5px] text-night-200 mt-0.5">{yen(SUB_PLAN.sub_light.price)}/月。ペースを落として続けられます</span>
+                  </span>
+                </button>
+              )}
+              <button onClick={() => setCancelSub(false)} className="btn-press card-deep p-3.5 text-left flex items-center gap-3">
+                <IconTile name="users" size={38} iconSize={18} />
+                <span className="flex-1">
+                  <span className="block text-[12.5px] font-bold text-cream-50">次回来店時にスタッフに相談する</span>
+                  <span className="block text-[10.5px] text-night-200 mt-0.5">頻度・内容の調整など、あなたに合う形を一緒に探します</span>
+                </span>
+              </button>
+            </div>
+            <button onClick={() => setCancelSub('confirm')} className="btn-press mt-3 w-full text-center text-[12px] font-bold text-night-300 underline py-2">このまま解約手続きへすすむ</button>
+          </div>
+        )}
       </Modal>
     </div>
   );
@@ -3675,6 +4392,22 @@ function parseSleepCsv(text) {
    SECTION 15.4: カウンセリング表（LINE→来店前入力 / 結果は簡易表示のみ。
    詳細なAI分析はスタッフ専用として管理コンソールにのみ表示される）
    ============================================================ */
+// カウンセリング表のセクション（CounselingScreen内で定義すると毎レンダーで
+// コンポーネント型が変わり、入力中のフォーカスが失われるためトップレベルに置く）
+function CounselSec({ en, title, n, total, doneList, optional, children }) {
+  const done = doneList[n - 1];
+  return (
+    <div className="card p-4 mt-3">
+      <div className="flex items-center justify-between mb-0.5">
+        <p className="kicker">{en}</p>
+        <span className={`text-[10px] font-bold ${done ? 'text-[#4cc2ae]' : 'text-night-300'}`}>{n} / {total}{done ? ' ✓' : ''}</span>
+      </div>
+      <p className="text-[13.5px] font-bold text-cream-50 mb-2.5">{title}{optional && <span className="ml-1.5 text-[9.5px] font-bold text-night-300 border border-night-400/60 rounded-[5px] px-1.5 py-0.5 align-[2px]">任意</span>}</p>
+      {children}
+    </div>
+  );
+}
+
 function CounselingScreen() {
   const { state, update, back } = useApp();
   const [name, setName] = useState(state.profile.name || '');
@@ -3727,13 +4460,19 @@ function CounselingScreen() {
     </div>
   );
 
-  const Sec = ({ en, title, children }) => (
-    <div className="card p-4 mt-3">
-      <p className="kicker mb-0.5">{en}</p>
-      <p className="text-[13px] font-bold text-cream-50 mb-2.5">{title}</p>
-      {children}
-    </div>
-  );
+  const SEC_TOTAL = 6;
+  const secDone = [
+    !!(name.trim() || age || job),
+    concerns.length > 0 || !!worst.trim(),
+    true, // 睡眠は初期値のままでもOK
+    habits.length > 0,
+    !!bodyNote.trim(),
+    !!hope.trim(),
+  ];
+  const doneCount = secDone.filter(Boolean).length;
+  // ※Secをここで定義すると毎レンダーで再マウントされ入力フォーカスが失われるため、トップレベルのCounselSecを使う
+  const Sec = CounselSec;
+  const secProps = { total: SEC_TOTAL, doneList: secDone };
 
   return (
     <div className="min-h-screen">
@@ -3741,10 +4480,19 @@ function CounselingScreen() {
       <div className="p-4 pb-8">
         <div className="card-deep p-3.5 flex gap-2.5 items-center">
           <Soupy size={44} animate={false} showZzz={false} />
-          <p className="font-maru text-[11.5px] text-night-100 leading-relaxed font-bold">はじめまして！ご来店前に、いまの状態をおしえてね。所要3分・そのまま送信でOK！</p>
+          <p className="font-maru text-[11.5px] text-night-100 leading-relaxed font-bold">はじめまして！ご来店前に、いまの状態をおしえてね。ぜんぶで{SEC_TOTAL}セクション・約3分だよ！</p>
         </div>
 
-        <Sec en="Profile" title="基本情報">
+        {/* 入力の進捗（ゴールが見える化） */}
+        <div className="card p-3.5 mt-3">
+          <div className="flex items-center justify-between mb-1.5">
+            <p className="text-[11.5px] font-bold text-cream-50">入力状況 <span className="text-moon-300">{doneCount} / {SEC_TOTAL}</span> セクション</p>
+            <p className="text-[10px] font-bold text-night-300">必須は「2. いまのお悩み」のみ</p>
+          </div>
+          <ProgressBar pct={doneCount / SEC_TOTAL * 100} color={C.moon} h={7} />
+        </div>
+
+        <Sec en="Profile" title="基本情報" n={1} {...secProps}>
           <input value={name} onChange={e => setName(e.target.value)} placeholder="お名前（ニックネームOK）"
             className="w-full bg-night-600 border border-night-400/50 rounded-[9px] px-3.5 py-2.5 text-[13px] font-bold text-cream-50 outline-none focus:border-moon-400" />
           <p className="text-[10.5px] font-bold text-night-200 mt-3 mb-1.5">年代</p>
@@ -3753,7 +4501,7 @@ function CounselingScreen() {
           <div className="flex flex-wrap gap-1.5">{COUNSEL_JOBS.map(j => <Chip key={j} active={job === j} onClick={() => setJob(j)}>{j}</Chip>)}</div>
         </Sec>
 
-        <Sec en="Concerns" title="いまのお悩み（あてはまるものすべて）">
+        <Sec en="Concerns" title="いまのお悩み（あてはまるものすべて）" n={2} {...secProps}>
           <div className="grid grid-cols-2 gap-1.5">
             {COUNSEL_CONCERNS.map(c => (
               <button key={c.id} onClick={() => toggle(concerns, setConcerns, c.id)}
@@ -3766,7 +4514,7 @@ function CounselingScreen() {
             className="mt-2.5 w-full bg-night-600 border border-night-400/50 rounded-[9px] px-3.5 py-2.5 text-[12px] font-bold text-cream-50 outline-none focus:border-moon-400" />
         </Sec>
 
-        <Sec en="Sleep" title="ふだんの睡眠">
+        <Sec en="Sleep" title="ふだんの睡眠" n={3} {...secProps}>
           <div className="grid grid-cols-2 gap-3">
             <label className="card-deep p-3 block">
               <span className="text-[10px] font-bold text-night-200">平均のねる時間</span>
@@ -3781,7 +4529,7 @@ function CounselingScreen() {
           <MoonRating value={sleepSat} onChange={setSleepSat} />
         </Sec>
 
-        <Sec en="Habits" title="あてはまる習慣">
+        <Sec en="Habits" title="あてはまる習慣" n={4} {...secProps}>
           <div className="flex flex-col gap-1.5">
             {HABITS.filter(h => !h.good).map(h => (
               <button key={h.id} onClick={() => toggle(habits, setHabits, h.id)}
@@ -3793,12 +4541,12 @@ function CounselingScreen() {
           </div>
         </Sec>
 
-        <Sec en="Body" title="からだについて（任意）">
+        <Sec en="Body" title="からだについて" n={5} optional {...secProps}>
           <textarea value={bodyNote} onChange={e => setBodyNote(e.target.value)} rows={2} placeholder="痛む場所、通院中・服薬中のことなど"
             className="w-full bg-night-600 border border-night-400/50 rounded-[9px] px-3.5 py-2.5 text-[12px] font-bold text-cream-50 outline-none focus:border-moon-400" />
         </Sec>
 
-        <Sec en="Goal" title="サロンに期待すること（任意）">
+        <Sec en="Goal" title="サロンに期待すること" n={6} optional {...secProps}>
           <textarea value={hope} onChange={e => setHope(e.target.value)} rows={2} placeholder="例）朝スッキリ起きられるようになりたい"
             className="w-full bg-night-600 border border-night-400/50 rounded-[9px] px-3.5 py-2.5 text-[12px] font-bold text-cream-50 outline-none focus:border-moon-400" />
         </Sec>
@@ -3934,10 +4682,12 @@ function HealthSyncScreen() {
 }
 
 function SoundsScreen() {
-  const { back } = useApp();
+  const { state, back } = useApp();
   const [playing, setPlaying] = useState(Sound.playing);
   const [volume, setVolume] = useState(0.5);
   const [timer, setTimer] = useState(30);
+  const lastAssess = (state.assessments || [])[state.assessments.length - 1];
+  const recSoundId = lastAssess ? assessProposal(lastAssess).soundId : null;
 
   const toggle = (id) => {
     if (playing === id) { Sound.stop(); setPlaying(null); return; }
@@ -3963,7 +4713,7 @@ function SoundsScreen() {
               className={`btn-press card p-4 text-left flex items-center gap-3 ${playing === s.id ? 'ring-2 ring-moon-400' : ''}`}>
               <span className={`w-12 h-12 rounded-[10px] flex items-center justify-center ${playing === s.id ? 'bg-moon-400/20 text-moon-300' : 'bg-night-500 text-cream-100'}`}><Icon name={s.icon} size={22} /></span>
               <span className="flex-1 min-w-0">
-                <span className="text-[9.5px] font-bold text-moon-300">{s.tag}</span>
+                <span className="text-[9.5px] font-bold text-moon-300">{s.tag}{s.id === recSoundId && <span className="ml-1.5 text-[8.5px] text-night-900 bg-moon-400 rounded-full px-1.5 py-0.5">診断結果からのおすすめ</span>}</span>
                 <span className="block text-[13.5px] font-bold text-cream-50">{s.name}</span>
                 <span className="block text-[10.5px] text-night-200 mt-0.5 leading-relaxed">{s.desc}</span>
               </span>
@@ -4019,7 +4769,10 @@ function QuickCheckScreen({ route }) {
       {!result ? (
         <div className="p-4">
           <ProgressBar pct={(idx) / QUICK_QS.length * 100} color={C.moon} />
-          <p className="text-[10.5px] text-night-200 font-bold mt-1.5">Q{idx + 1} / {QUICK_QS.length}　約3分・来店前のセルフチェック</p>
+          <div className="flex items-center justify-between mt-1.5">
+            <p className="text-[11.5px] text-night-100 font-bold">全{QUICK_QS.length}問中 <span className="text-moon-300 text-[13px]">{idx + 1}問目</span></p>
+            <p className="text-[11px] text-night-200 font-bold">のこり{QUICK_QS.length - idx}問・約{Math.max(1, Math.ceil((QUICK_QS.length - idx) * 20 / 60))}分</p>
+          </div>
           <div className="card p-5 mt-3 anim-pop" key={idx}>
             <p className="text-[16px] font-bold text-cream-50 leading-relaxed">{QUICK_QS[idx].q}</p>
             <div className="flex flex-col gap-2 mt-4">
@@ -4063,6 +4816,7 @@ function QuickCheckScreen({ route }) {
 
 function AssessScreen({ route }) {
   const { state, update, back, nav } = useApp();
+  const draft = state.assessDraft;
   const [phase, setPhase] = useState('intro'); // intro | quiz | result
   const [idx, setIdx] = useState(0);
   const [answers, setAnswers] = useState([]);
@@ -4070,14 +4824,24 @@ function AssessScreen({ route }) {
   const q = ASSESS_QS[idx];
   const cat = q && ASSESS_CATS.find(c => c.id === q.cat);
 
+  const resume = () => {
+    setAnswers(draft.answers || []);
+    setIdx(Math.min(draft.idx || 0, ASSESS_QS.length - 1));
+    setPhase('quiz');
+  };
   const pick = (v) => {
     const next = [...answers]; next[idx] = v;
     setAnswers(next);
-    if (idx + 1 < ASSESS_QS.length) { setIdx(idx + 1); return; }
+    if (idx + 1 < ASSESS_QS.length) {
+      setIdx(idx + 1);
+      update(st => { st.assessDraft = { answers: next, idx: idx + 1, date: todayStr() }; }); // 途中保存
+      return;
+    }
     const res = assessResult(next);
     const rec = { id: uid(), date: todayStr(), answers: next, ...res };
     update(st => {
-      st.assessments.push(rec);
+      st.assessments.push(rec); // 結果はこの時点で自動保存（どのボタンで戻っても消えません）
+      st.assessDraft = null;
       if (!xpDoneToday(st, 'ほんかく診断')) gainXp(st, 25, 'ほんかく診断');
       if (st.visitFlow) st.visitFlow.step = Math.max(st.visitFlow.step, 3);
     });
@@ -4104,8 +4868,13 @@ function AssessScreen({ route }) {
               </p>
             ))}
           </div>
-          <p className="text-[10.5px] text-night-300 mt-2.5 leading-relaxed">結果はスタッフとのカウンセリングで使います。深く考えず、最近1ヶ月の感覚でお答えください。</p>
-          <div className="mt-4"><Btn kind="moon" full onClick={() => setPhase('quiz')}>診断をはじめる</Btn></div>
+          <p className="text-[10.5px] text-night-300 mt-2.5 leading-relaxed">結果はスタッフとのカウンセリングで使います。深く考えず、最近1ヶ月の感覚でお答えください。とちゅうでやめても、回答はここまで自動保存されます。</p>
+          <div className="mt-4 flex flex-col gap-2">
+            {draft && (draft.answers || []).length > 0 && (
+              <Btn kind="moon" full onClick={resume}>つづきから再開する（{(draft.answers || []).length}問まで回答ずみ）</Btn>
+            )}
+            <Btn kind={draft && (draft.answers || []).length ? 'ghost' : 'moon'} full onClick={() => { setAnswers([]); setIdx(0); setPhase('quiz'); }}>{draft && (draft.answers || []).length ? 'さいしょからやりなおす' : '診断をはじめる'}</Btn>
+          </div>
         </div>
       )}
 
@@ -4113,8 +4882,12 @@ function AssessScreen({ route }) {
         <div className="p-4">
           <ProgressBar pct={idx / ASSESS_QS.length * 100} color={C.moon} />
           <div className="flex items-center justify-between mt-1.5">
-            <p className="text-[10.5px] text-night-200 font-bold">Q{idx + 1} / {ASSESS_QS.length}</p>
-            <p className="text-[10.5px] font-bold text-moon-300"><Icon name={cat.icon} size={12} className="mr-1 align-[-2px]" />{cat.name}</p>
+            <p className="text-[11.5px] text-night-100 font-bold">全{ASSESS_QS.length}問中 <span className="text-moon-300 text-[13px]">{idx + 1}問目</span></p>
+            <p className="text-[11px] text-night-200 font-bold">のこり約{Math.max(1, Math.ceil((ASSESS_QS.length - idx) * 16 / 60))}分</p>
+          </div>
+          <div className="flex items-center justify-between mt-1">
+            <p className="text-[10.5px] font-bold text-moon-300"><Icon name={cat.icon} size={12} className="mr-1 align-[-2px]" />カテゴリ {ASSESS_CATS.findIndex(c => c.id === cat.id) + 1}/{ASSESS_CATS.length}｜{cat.name}</p>
+            <p className="text-[10px] text-night-300 font-bold">とちゅう保存OK</p>
           </div>
           <div className="card p-5 mt-3 anim-pop" key={idx}>
             <p className="text-[15.5px] font-bold text-cream-50 leading-relaxed">{q.q}</p>
@@ -4171,9 +4944,77 @@ function AssessScreen({ route }) {
             </div>
           </div>
 
-          <div className="mt-4 flex flex-col gap-2">
-            <Btn kind="moon" full onClick={back}>結果をほぞんして終わる</Btn>
-            <Btn kind="ghost" full onClick={() => nav('care')}>おすすめのケアを見る</Btn>
+          {/* 状態 → 原因 → 施術 → アイテム → 自宅ケア（役員FB④） */}
+          {(() => {
+            const pr = assessProposal(result);
+            return (
+              <div className="mt-4">
+                <SectionTitle icon="arrowR" en="Next Actions" title="この結果から、次にやること" sub="診断データと行動をつなげるご提案です" />
+
+                {pr.treatments.length > 0 && (
+                  <div className="card p-4">
+                    <p className="text-[11px] font-bold text-moon-300 mb-2"><Icon name="heart" size={13} className="mr-1 align-[-2px]" />おすすめの施術（サロンで）</p>
+                    {pr.treatments.map((tr, i) => (
+                      <p key={i} className="text-[12.5px] font-bold text-cream-50 py-1 flex items-start gap-2"><Icon name="check" size={14} className="text-moon-300 mt-0.5 shrink-0" strokeWidth={2.2} />{tr}</p>
+                    ))}
+                    {pr.serious
+                      ? <p className="text-[11px] text-[#f0968c] font-bold mt-2">お疲れサインが強めです。まずは2週間に1回のペースで整えるのがおすすめ。スタッフにご相談ください。</p>
+                      : <p className="text-[11px] text-night-200 mt-2">よい状態のキープには月1回のメンテナンスがおすすめです。</p>}
+                    <div className="mt-2.5"><Btn small kind="ghost" onClick={() => nav('shop', { view: 'subs' })}>プラン・回数券を見る</Btn></div>
+                  </div>
+                )}
+
+                {pr.stretches.length > 0 && (
+                  <div className="card p-4 mt-2.5">
+                    <p className="text-[11px] font-bold text-moon-300 mb-2"><Icon name="home" size={13} className="mr-1 align-[-2px]" />自宅でやること</p>
+                    <div className="flex flex-col gap-1.5">
+                      {pr.stretches.map(id => {
+                        const s = STRETCH[id];
+                        return (
+                          <button key={id} onClick={() => nav('stretchPlay', { id })} className="btn-press card-deep p-2.5 flex items-center gap-2.5 text-left">
+                            <IconTile name={s.icon} size={34} iconSize={16} />
+                            <span className="flex-1 text-[12px] font-bold text-cream-50">{s.name}<span className="text-night-300 text-[10px] ml-1.5">約{s.mins}分</span></span>
+                            <Icon name="play" size={14} className="text-moon-300" />
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <button onClick={() => nav('sounds')} className="btn-press mt-2 w-full card-deep p-2.5 flex items-center gap-2.5 text-left">
+                      <IconTile name="headphones" size={34} iconSize={16} />
+                      <span className="flex-1 text-[12px] font-bold text-cream-50">おすすめサウンド：{SOUND_PRESETS.find(s => s.id === pr.soundId)?.name}</span>
+                      <Icon name="play" size={14} className="text-moon-300" />
+                    </button>
+                  </div>
+                )}
+
+                {pr.products.length > 0 && (
+                  <div className="card p-4 mt-2.5">
+                    <p className="text-[11px] font-bold text-moon-300 mb-2"><Icon name="bag" size={13} className="mr-1 align-[-2px]" />おすすめアイテム</p>
+                    <div className="flex flex-col gap-1.5">
+                      {pr.products.map(id => {
+                        const p = PRODUCT[id];
+                        return (
+                          <button key={id} onClick={() => nav('product', { id })} className="btn-press card-deep p-2.5 flex items-center gap-2.5 text-left">
+                            <IconTile name={p.icon} size={34} iconSize={16} />
+                            <span className="flex-1 min-w-0">
+                              <span className="block text-[12px] font-bold text-cream-50 truncate">{p.name}</span>
+                              <span className="block text-[10px] text-moon-300 font-bold">{yen(p.price)}</span>
+                            </span>
+                            <Icon name="arrowR" size={13} className="text-night-300" />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          <p className="text-[11px] text-night-200 mt-4 text-center font-bold"><Icon name="check" size={12} className="mr-1 align-[-2px] text-[#4cc2ae]" />結果は自動保存ずみ。どちらを選んでも消えません</p>
+          <div className="mt-2 flex flex-col gap-2">
+            <Btn kind="moon" full onClick={back}>とじる（結果はカルテに保存ずみ）</Btn>
+            <Btn kind="ghost" full onClick={() => nav('care')}>ケア一覧をひらく</Btn>
           </div>
         </div>
       )}
@@ -4408,6 +5249,7 @@ function VisitFlowScreen() {
       if (v && v.date === todayStr()) v.karte = report;
       if ((vf.prescribed || []).length) st.prescription = { items: vf.prescribed.slice(), date: todayStr(), until: addDays(todayStr(), 14) };
       st.visitFlow = null;
+      st.mode = 'home'; // 退店後はじたくモードへ（きょうやることに処方が反映される）
       gainXp(st, 30, '来店フロー完了');
     });
     setCelebrate(report);
@@ -4785,6 +5627,26 @@ function SettingsScreen() {
   const { state, update, back, replaceAll, nav } = useApp();
   const [name, setName] = useState(state.profile.name);
   const [confirm, setConfirm] = useState(null); // 'demo' | 'reset'
+  const [importPreview, setImportPreview] = useState(null); // 取り込むデータのプレビュー
+  const importRef = useRef(null);
+
+  const onImportFile = async (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    try {
+      const st = JSON.parse(await f.text());
+      if (!st || st.version !== 1 || !st.profile) { toast('SLEEPYの引き継ぎファイルではありません', 'err'); return; }
+      setImportPreview(st);
+    } catch (err) { toast('ファイルを読み込めませんでした', 'err'); }
+  };
+  const applyImport = () => {
+    const st = { ...defaultState(), ...importPreview, onboarded: true };
+    replaceAll(st);
+    setImportPreview(null);
+    toast(`おかえりなさい、${st.profile.name || 'ゲスト'}さん！データを引き継ぎました`);
+  };
+
   return (
     <div className="min-h-screen">
       <BackHeader title="せってい" onBack={back} />
@@ -4805,8 +5667,9 @@ function SettingsScreen() {
           <div className="mt-3"><Btn small onClick={() => { update(st => { st.profile.name = name.trim() || 'ゲスト'; }); toast('保存しました'); }}>保存する</Btn></div>
         </div>
 
-        <SectionTitle icon="box" en="Data" title="データ" sub="データはこの端末のブラウザにのみ保存されます" />
+        <SectionTitle icon="phone" en="Account Transfer" title="アカウント引き継ぎ" sub="店舗タブレット⇄ご自身のスマホでデータをつなげます" />
         <div className="card p-4 flex flex-col gap-2">
+          <p className="text-[11.5px] text-night-100 leading-relaxed">サロンのタブレットで作った診断・記録は、<span className="font-bold text-cream-50">「書き出す」→ スマホで「引き継ぐ」</span>でそのまま持ち帰れます。ご自宅のデータと分断されません。</p>
           <Btn kind="moon" full onClick={() => {
             const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
             const a = document.createElement('a');
@@ -4814,9 +5677,28 @@ function SettingsScreen() {
             a.download = `sleepy_${state.profile.memberNo}.json`;
             a.click();
             setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-            toast('書き出しました。受付でスタッフにお渡しください');
-          }}><Icon name="upload" size={15} className="mr-1" />データを書き出す（サロン連携用）</Btn>
-          <p className="text-[10px] text-night-300 leading-relaxed px-1">書き出したファイルをサロンの管理コンソールに取り込むと、スタッフがあなたの睡眠・姿勢データを見ながらカウンセリングできます。</p>
+            toast('書き出しました。スマホ側の「引き継ぐ」で読み込めます');
+          }}><Icon name="upload" size={15} className="mr-1" />この端末のデータを書き出す</Btn>
+          <Btn kind="ghost" full onClick={() => importRef.current && importRef.current.click()}><Icon name="download" size={15} className="mr-1" />引き継ぎファイルを読み込む</Btn>
+          <input ref={importRef} type="file" accept=".json,application/json" className="hidden" onChange={onImportFile} />
+          <p className="text-[10px] text-night-300 leading-relaxed px-1">書き出したファイルはサロンの管理コンソールにも取り込めて、スタッフがあなたの睡眠・姿勢データを見ながらカウンセリングできます。実運用ではLINEログインで自動的に同じアカウントにつながります（docs/ARCHITECTURE.md）。</p>
+        </div>
+
+        <SectionTitle icon="glasses" en="Display" title="表示" />
+        <div className="card p-4">
+          <button onClick={() => update(st => { st.largeText = !st.largeText; })} className="btn-press w-full flex items-center gap-3 text-left">
+            <span className={`w-11 h-6.5 rounded-full p-0.5 transition ${state.largeText ? 'bg-moon-400' : 'bg-night-500'}`} style={{ height: 26, width: 46 }}>
+              <span className={`block w-[22px] h-[22px] rounded-full bg-white transition-transform ${state.largeText ? 'translate-x-[20px]' : ''}`} />
+            </span>
+            <span className="flex-1">
+              <span className="block text-[13px] font-bold text-cream-50">文字を大きく表示</span>
+              <span className="block text-[10.5px] text-night-200 mt-0.5">アプリ全体を約1割拡大して表示します</span>
+            </span>
+          </button>
+        </div>
+
+        <SectionTitle icon="box" en="Data" title="データ" sub="データはこの端末のブラウザにのみ保存されます" />
+        <div className="card p-4 flex flex-col gap-2">
           <Btn kind="ghost" full onClick={() => nav('health')}><Icon name="watch" size={15} className="mr-1" />ヘルスケア連携（睡眠データ取り込み）</Btn>
           <Btn kind="ghost" full onClick={() => setConfirm('demo')}><Icon name="refresh" size={15} className="mr-1" />デモデータを入れなおす</Btn>
           <Btn kind="danger" full onClick={() => setConfirm('reset')}><Icon name="trash" size={15} className="mr-1" />すべてのデータを削除する</Btn>
@@ -4842,11 +5724,31 @@ function SettingsScreen() {
               </div>
             </div>
           </div>
-          <p className="text-[10px] text-night-300 mt-4 leading-relaxed">公式快眠パートナーアプリ v3.0<br />マスコット：スーピーくん</p>
+          <p className="text-[10px] text-night-300 mt-4 leading-relaxed">公式快眠パートナーアプリ v7.0<br />マスコット：スーピーくん</p>
         </div>
 
         <a href="admin.html" className="block text-center text-[10.5px] font-bold text-night-300 underline mt-4 mb-2">スタッフ・管理者の方はこちら（管理コンソール）</a>
       </div>
+
+      <Modal open={!!importPreview} onClose={() => setImportPreview(null)}>
+        {importPreview && (
+          <div>
+            <p className="kicker mb-1">Account Transfer</p>
+            <h3 className="text-[16px] font-bold text-cream-50">このデータを引き継ぎますか？</h3>
+            <div className="card-deep p-3.5 mt-3 text-[12px] text-night-100 space-y-1">
+              <p>おなまえ：<span className="font-bold text-cream-50">{importPreview.profile?.name || 'ゲスト'}</span>（{importPreview.profile?.memberNo || '−'}）</p>
+              <p>睡眠記録：<span className="font-bold text-cream-50">{Object.keys(importPreview.sleepLogs || {}).length}日分</span></p>
+              <p>スーピーくん：<span className="font-bold text-cream-50">Lv.{levelFromXp(importPreview.soupy?.xp || 0).lv}（{importPreview.soupy?.xp || 0} XP）</span></p>
+              <p>来店履歴：<span className="font-bold text-cream-50">{(importPreview.visits || []).length}回</span>／本診断：<span className="font-bold text-cream-50">{(importPreview.assessments || []).length}回</span></p>
+            </div>
+            <p className="text-[10.5px] text-[#f0968c] font-bold mt-2.5">※いまこの端末にあるデータは、引き継いだ内容で置き換わります。</p>
+            <div className="mt-4 flex gap-2">
+              <Btn kind="ghost" full onClick={() => setImportPreview(null)}>やめる</Btn>
+              <Btn kind="moon" full onClick={applyImport}>引き継ぐ</Btn>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       <Modal open={!!confirm} onClose={() => setConfirm(null)}>
         <div className="text-center py-2">
@@ -5007,13 +5909,14 @@ function App() {
     case 'sounds': screen = <SoundsScreen />; break;
     case 'health': screen = <HealthSyncScreen />; break;
     case 'counseling': screen = <CounselingScreen />; break;
+    case 'calendar': screen = <CalendarScreen />; break;
     default: screen = <HomeScreen />;
   }
 
   return (
     <Ctx.Provider value={{ state, update, replaceAll, nav, back, route }}>
       <div className="mx-auto max-w-[430px] min-h-screen relative shadow-2xl shadow-black/60"
-        style={{ background: 'linear-gradient(180deg,#0d1424 0%,#121a2e 40%,#0d1424 100%)', paddingBottom: isTab ? 96 : 24 }}>
+        style={{ background: 'linear-gradient(180deg,#0d1424 0%,#121a2e 40%,#0d1424 100%)', paddingBottom: isTab ? 96 : 24, zoom: state.largeText ? 1.1 : 1 }}>
         <div key={stack.length + ':' + route.name}>{screen}</div>
         {isTab && <TabBar current={route.name} onTab={t => nav(t)} />}
         <LevelUpModal info={levelUp} onClose={() => setLevelUp(null)} />
