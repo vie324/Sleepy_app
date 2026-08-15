@@ -84,6 +84,15 @@ tailwind.config = {
   @keyframes star-burst { 0% { opacity:1; transform:translate(0,0) scale(.4) rotate(0);} 100% { opacity:0; transform:translate(var(--tx), var(--ty)) scale(1) rotate(180deg);} }
   @keyframes spin-slow { to { transform:rotate(360deg);} }
   @keyframes moon-rock { 0%,100% { transform:rotate(-1.8deg);} 50% { transform:rotate(1.8deg);} }
+  @keyframes soupy-hop { 0%,100% { transform:translateY(0) scale(1,1);} 30% { transform:translateY(-7px) scale(.96,1.05);} 60% { transform:translateY(0) scale(1.045,.94);} }
+  @keyframes soupy-wobble { 0%,100% { transform:rotate(-2.4deg);} 50% { transform:rotate(2.4deg);} }
+  @keyframes soupy-startle { 0% { transform:translateY(0);} 25% { transform:translateY(-6px) scale(1.02,.98);} 45% { transform:translateY(1px);} 100% { transform:translateY(0);} }
+  @keyframes talk-mouth { from { transform:scaleY(.3);} to { transform:scaleY(1);} }
+  @keyframes ear-flick { 0%,100% { transform:rotate(0);} 30% { transform:rotate(-8deg);} 65% { transform:rotate(4.5deg);} }
+  @keyframes sparkle-pop { 0% { transform:scale(0); opacity:0;} 35% { transform:scale(1.15); opacity:1;} 70% { transform:scale(.92); opacity:1;} 100% { transform:scale(0); opacity:0;} }
+  @keyframes sweat-slide { 0% { transform:translateY(0); opacity:0;} 30% { opacity:.95;} 100% { transform:translateY(11px); opacity:0;} }
+  @keyframes pupil-drift { 0%,18%,100% { transform:translate(0,0);} 30%,46% { transform:translate(1.7px,.4px);} 62%,80% { transform:translate(-1.5px,.6px);} }
+  @keyframes excl-pop { 0% { transform:scale(0);} 60% { transform:scale(1.25);} 100% { transform:scale(1);} }
   .brand-serif { font-family: "Shippori Mincho", "Hiragino Mincho ProN", "Yu Mincho", serif; }
 
   .anim-floaty { animation: floaty 3.4s ease-in-out infinite; }
@@ -1302,34 +1311,135 @@ function WoolCircles({ list, fill, extra = 0 }) {
   return <g>{list.map(([x, y, r], i) => <circle key={i} cx={x} cy={y} r={r + extra} fill={fill} />)}</g>;
 }
 
-function SoupyEyes({ mood }) {
-  if (mood === 'happy' || mood === 'excited') {
-    return (
-      <g>
-        <circle cx={110} cy={117} r={5.2} fill={C.chocoDark} />
-        <circle cx={150} cy={117} r={5.2} fill={C.chocoDark} />
-        <circle cx={112} cy={115} r={1.9} fill="#fff" />
-        <circle cx={152} cy={115} r={1.9} fill="#fff" />
-      </g>
-    );
-  }
-  if (mood === 'tired') {
-    return (
-      <g fill="none" stroke={C.chocoDark} strokeWidth={4} strokeLinecap="round">
-        <path d="M101 119 q9 -4 18 0" />
-        <path d="M141 119 q9 -4 18 0" />
-      </g>
-    );
-  }
-  // sleep（ブランドビジュアルと同じ、まつ毛つきの穏やかな閉じ目）
-  return (
-    <g fill="none" stroke={C.chocoDark} strokeWidth={4} strokeLinecap="round">
-      <path d="M101 116 q9 7 18 0" />
-      <path d="M141 116 q9 7 18 0" />
-      <path d="M101 116 l-4.5 -3" strokeWidth={3.2} />
-      <path d="M159 116 l4.5 -3" strokeWidth={3.2} />
+/* ---- 表情リグ ----
+   目・まゆ・口・ほっぺ・エフェクトを SOUPY_EMOTIONS テーブルで一括駆動。
+   まばたき/視線/口ぱく等のマイクロモーションつき。将来 Rive/Live2D に
+   差し替える場合も、この感情キー（state→emotion）をそのまま入力に流用できる。 */
+const SOUPY_EMOTIONS = {
+  sleep:     { eyes: 'closed',   mouth: 'smile', cheek: .85, zzz: true },                                  // すやすや（ブランドの基本形）
+  calm:      { eyes: 'open',     mouth: 'smile', cheek: .85, blink: true },                                // おきてる・おだやか
+  happy:     { eyes: 'openBig',  mouth: 'smile', cheek: 1,   blink: true },                                // にこにこ
+  excited:   { eyes: 'sparkle',  mouth: 'open',  cheek: 1,   body: 'hop', emote: 'sparkles' },             // わくわく
+  proud:     { eyes: 'proudArc', mouth: 'smile', cheek: .9,  emote: 'sparkles' },                          // えっへん
+  worried:   { eyes: 'uru',      mouth: 'wavy',  cheek: .55, blink: true, brow: 'worry', emote: 'sweat' }, // うるうる・心配
+  surprised: { eyes: 'wide',     mouth: 'o',     cheek: .7,  blink: true, brow: 'up', body: 'startle', emote: 'excl' }, // びっくり
+  melty:     { eyes: 'squeeze',  mouth: 'wavy',  cheek: 1.15, body: 'wobble' },                            // ふにゃ〜（なでられ中）
+  tired:     { eyes: 'tired',    mouth: 'wavy',  cheek: .6,  emote: 'sweat' },                             // おつかれ
+};
+
+function SoupyBrows({ kind }) {
+  if (kind === 'worry') return (
+    <g stroke={C.chocoDark} strokeWidth={3} strokeLinecap="round" fill="none" opacity={.85}>
+      <path d="M100 106 Q108 100 116 101" /><path d="M160 106 Q152 100 144 101" />
     </g>
   );
+  if (kind === 'up') return (
+    <g stroke={C.chocoDark} strokeWidth={3} strokeLinecap="round" fill="none" opacity={.85}>
+      <path d="M101 100 q9 -6 18 -1" /><path d="M141 99 q9 -1 18 1" />
+    </g>
+  );
+  return null;
+}
+
+function SoupyEyesRig({ type, blinking }) {
+  const noBlink = type === 'closed' || type === 'tired' || type === 'squeeze' || type === 'proudArc' || type === 'sparkle';
+  if (blinking && !noBlink) return (
+    <g fill="none" stroke={C.chocoDark} strokeWidth={4} strokeLinecap="round">
+      <path d="M101 117 q9 6 18 0" /><path d="M141 117 q9 6 18 0" />
+    </g>
+  );
+  if (type === 'open') return (
+    <g style={{ animation: 'pupil-drift 6.5s ease-in-out infinite' }}>
+      <circle cx={110} cy={117} r={4.4} fill={C.chocoDark} /><circle cx={150} cy={117} r={4.4} fill={C.chocoDark} />
+      <circle cx={111.6} cy={115.4} r={1.5} fill="#fff" /><circle cx={151.6} cy={115.4} r={1.5} fill="#fff" />
+    </g>
+  );
+  if (type === 'openBig') return (
+    <g style={{ animation: 'pupil-drift 6.5s ease-in-out infinite' }}>
+      <circle cx={110} cy={117} r={5.2} fill={C.chocoDark} /><circle cx={150} cy={117} r={5.2} fill={C.chocoDark} />
+      <circle cx={112} cy={115} r={1.9} fill="#fff" /><circle cx={152} cy={115} r={1.9} fill="#fff" />
+    </g>
+  );
+  if (type === 'sparkle') return (
+    <g fill={C.chocoDark}>
+      {[110, 150].map(x => (
+        <g key={x}>
+          <path d={`M${x} 110.5 l2.3 4.4 4.8 .8 -3.5 3.4 .9 4.8 -4.5 -2.3 -4.5 2.3 .9 -4.8 -3.5 -3.4 4.8 -.8 Z`} />
+          <circle cx={x + 1.5} cy={115.6} r={1.2} fill="#fff" />
+        </g>
+      ))}
+    </g>
+  );
+  if (type === 'wide') return (
+    <g>
+      <circle cx={110} cy={117} r={7} fill="#fff" stroke={C.chocoDark} strokeWidth={2.6} />
+      <circle cx={150} cy={117} r={7} fill="#fff" stroke={C.chocoDark} strokeWidth={2.6} />
+      <circle cx={110} cy={118.2} r={2.8} fill={C.chocoDark} /><circle cx={150} cy={118.2} r={2.8} fill={C.chocoDark} />
+    </g>
+  );
+  if (type === 'uru') return (
+    <g>
+      <circle cx={110} cy={117} r={5.4} fill={C.chocoDark} /><circle cx={150} cy={117} r={5.4} fill={C.chocoDark} />
+      <circle cx={108.5} cy={118.8} r={2.3} fill="#fff" opacity={.9} style={{ animation: 'twinkle 1.6s ease-in-out infinite' }} />
+      <circle cx={148.5} cy={118.8} r={2.3} fill="#fff" opacity={.9} style={{ animation: 'twinkle 1.6s ease-in-out .4s infinite' }} />
+      <circle cx={112} cy={114.8} r={1.5} fill="#fff" /><circle cx={152} cy={114.8} r={1.5} fill="#fff" />
+    </g>
+  );
+  if (type === 'squeeze') return (
+    <g fill="none" stroke={C.chocoDark} strokeWidth={3.6} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M116 111.5 l-10 5.5 10 5.5" /><path d="M144 111.5 l10 5.5 -10 5.5" />
+    </g>
+  );
+  if (type === 'proudArc') return (
+    <g fill="none" stroke={C.chocoDark} strokeWidth={4} strokeLinecap="round">
+      <path d="M101 119 q9 -8 18 0" /><path d="M141 119 q9 -8 18 0" />
+    </g>
+  );
+  if (type === 'tired') return (
+    <g fill="none" stroke={C.chocoDark} strokeWidth={4} strokeLinecap="round">
+      <path d="M101 119 q9 -4 18 0" /><path d="M141 119 q9 -4 18 0" />
+    </g>
+  );
+  // closed（ブランドビジュアルと同じ、まつ毛つきの穏やかな閉じ目）
+  return (
+    <g fill="none" stroke={C.chocoDark} strokeWidth={4} strokeLinecap="round">
+      <path d="M101 116 q9 7 18 0" /><path d="M141 116 q9 7 18 0" />
+      <path d="M101 116 l-4.5 -3" strokeWidth={3.2} /><path d="M159 116 l4.5 -3" strokeWidth={3.2} />
+    </g>
+  );
+}
+
+function SoupyMouth({ kind, talking }) {
+  if (talking) return (
+    <path d="M122 130 q8 9 16 0 z" fill="#a2664a" stroke={C.chocoDark} strokeWidth={3} strokeLinejoin="round"
+      style={{ animation: 'talk-mouth .26s ease-in-out infinite alternate', transformBox: 'fill-box', transformOrigin: '50% 12%' }} />
+  );
+  if (kind === 'open') return <path d="M122 130 q8 9 16 0 z" fill="#a2664a" stroke={C.chocoDark} strokeWidth={3} strokeLinejoin="round" />;
+  if (kind === 'o') return <ellipse cx={130} cy={132.5} rx={4.2} ry={5} fill="#a2664a" stroke={C.chocoDark} strokeWidth={2.8} />;
+  if (kind === 'wavy') return <path d="M122 131 q4 3.2 8 0 q4 -3.2 8 0" stroke={C.chocoDark} strokeWidth={3} strokeLinecap="round" fill="none" />;
+  return <path d="M123 130 q7 5.5 14 0" stroke={C.chocoDark} strokeWidth={3.2} strokeLinecap="round" fill="none" />;
+}
+
+function SoupyEmote({ kind }) {
+  if (kind === 'sparkles') return (
+    <g fill={C.moon} stroke={C.choco} strokeWidth={1.6} strokeLinejoin="round">
+      {[[198, 72, 0], [224, 106, .55], [62, 84, .95]].map(([x, y, d], i) => (
+        <path key={i} d={`M${x} ${y - 8} l2.6 5.2 5.6 .9 -4 4 1 5.6 -5.2 -2.7 -5.2 2.7 1 -5.6 -4 -4 5.6 -.9 Z`}
+          style={{ animation: `sparkle-pop 1.9s ease-in-out ${d}s infinite`, transformBox: 'fill-box', transformOrigin: '50% 50%' }} />
+      ))}
+    </g>
+  );
+  if (kind === 'sweat') return (
+    <path d="M186 95 q6.5 8.5 0 13.5 q-7.5 -5 0 -13.5 Z" fill="#9fc4f2" stroke="#5f87c9" strokeWidth={2}
+      style={{ animation: 'sweat-slide 2.2s ease-in infinite', transformBox: 'fill-box', transformOrigin: '50% 0%' }} />
+  );
+  if (kind === 'excl') return (
+    <g style={{ animation: 'excl-pop .5s cubic-bezier(.2,1.6,.4,1) both', transformBox: 'fill-box', transformOrigin: '50% 100%' }}>
+      <rect x={201} y={52} width={7} height={20} rx={3.5} fill={C.moon} stroke={C.choco} strokeWidth={2} transform="rotate(9 204 62)" />
+      <circle cx={208} cy={82} r={4} fill={C.moon} stroke={C.choco} strokeWidth={2} />
+    </g>
+  );
+  return null;
 }
 
 function SoupyAccessory({ id }) {
@@ -1369,19 +1479,50 @@ function SoupyAccessory({ id }) {
   return null;
 }
 
-function Soupy({ size = 220, mood = 'sleep', wearing = [], animate = true, showZzz, onTap, className = '', title, scene }) {
+function Soupy({ size = 220, mood = 'sleep', wearing = [], animate = true, showZzz, onTap, className = '', title, scene, talking = false }) {
   const [bounce, setBounce] = useState(0);
   const [hearts, setHearts] = useState([]);
-  const zzz = showZzz !== undefined ? showZzz : mood === 'sleep';
+  const [reaction, setReaction] = useState(null); // タップ時などの一時的な表情
+  const [blinking, setBlinking] = useState(false);
+  const reactTm = useRef(null);
+
+  const emotion = reaction || (SOUPY_EMOTIONS[mood] ? mood : 'sleep');
+  const E = SOUPY_EMOTIONS[emotion];
+  const zzz = showZzz !== undefined ? showZzz : !!E.zzz;
   const pink = wearing.includes('blanket');
+
+  // まばたき（目が開いている表情のみ・ランダム間隔）
+  useEffect(() => {
+    if (!animate || !E.blink) { setBlinking(false); return; }
+    let alive = true, tm;
+    const loop = () => {
+      tm = setTimeout(() => {
+        if (!alive) return;
+        setBlinking(true);
+        setTimeout(() => { if (alive) { setBlinking(false); loop(); } }, 130);
+      }, 2400 + Math.random() * 3200);
+    };
+    loop();
+    return () => { alive = false; clearTimeout(tm); };
+  }, [animate, E.blink]);
+
+  useEffect(() => () => clearTimeout(reactTm.current), []);
 
   const handleTap = () => {
     setBounce(b => b + 1);
+    setReaction('melty'); // ふにゃ〜
+    clearTimeout(reactTm.current);
+    reactTm.current = setTimeout(() => setReaction(null), 1500);
     const id = uid();
     setHearts(hs => [...hs, { id, x: 160 + Math.random() * 40, y: 76 + Math.random() * 20 }]);
     setTimeout(() => setHearts(hs => hs.filter(h => h.id !== id)), 1300);
     if (onTap) onTap();
   };
+
+  const bodyAnim = !animate ? null
+    : E.body === 'hop' ? 'soupy-hop 1.15s ease-in-out infinite'
+    : E.body === 'wobble' ? 'soupy-wobble .9s ease-in-out infinite'
+    : E.body === 'startle' ? 'soupy-startle .55s ease-out both' : null;
 
   return (
     <div className={`relative inline-block select-none ${animate ? 'anim-floaty' : ''} ${className}`}
@@ -1405,73 +1546,80 @@ function Soupy({ size = 220, mood = 'sleep', wearing = [], animate = true, showZ
           </g>
         )}
 
-        {/* ---- もこもこ輪郭（背面の茶色シルエット） ---- */}
-        <g>
-          <WoolCircles list={WOOL_BODY} fill={C.choco} extra={5} />
-          <WoolCircles list={WOOL_HEAD} fill={C.choco} extra={5} />
-          {EARS.map((e, i) => (
-            <ellipse key={i} cx={e.cx} cy={e.cy} rx={24} ry={14} fill={C.choco} transform={`rotate(${e.rot} ${e.cx} ${e.cy})`} />
-          ))}
-          <WoolCircles list={WOOL_BANG} fill={C.choco} extra={4.5} />
-        </g>
-
-        {/* ---- からだ（呼吸アニメーション） ---- */}
-        <g style={animate ? { animation: 'breathe 3.4s ease-in-out infinite', transformBox: 'fill-box', transformOrigin: '50% 90%' } : null}>
-          <WoolCircles list={WOOL_BODY} fill="url(#spWool)" />
-        </g>
-
-        {/* ---- 抱いている毛布（ネイビー×金の三日月 = ブランドの象徴） ---- */}
-        <g>
-          <path d="M86 152 Q130 166 174 152 Q198 170 194 202 Q188 234 130 238 Q72 234 66 202 Q62 170 86 152 Z"
-            fill={pink ? 'url(#spBlanketPink)' : 'url(#spBlanket)'} stroke="#10192e" strokeWidth={4} strokeLinejoin="round" />
-          <path d="M86 152 Q130 166 174 152" fill="none" stroke={pink ? '#fdeef2' : '#d9b45c'} strokeWidth={3.5} strokeLinecap="round" />
-          <path d="M97 176 Q122 188 118 218" fill="none" stroke="rgba(255,255,255,.09)" strokeWidth={5} strokeLinecap="round" />
-          <path d="M163 174 Q148 192 152 216" fill="none" stroke="rgba(255,255,255,.09)" strokeWidth={5} strokeLinecap="round" />
-          {pink ? (
-            <g fill="#fff" opacity={.75}>
-              <text x={118} y={206} fontSize={15}>♡</text>
-              <text x={142} y={192} fontSize={11}>♡</text>
-            </g>
-          ) : (
-            <path d="M138 184 a13 13 0 1 0 7 17 a10 10 0 1 1 -7 -17 Z" fill="url(#spMoon)" transform="rotate(-14 138 194)" />
-          )}
-        </g>
-
-        {/* ---- まえあし（毛布をぎゅっと抱く） ---- */}
-        <g>
-          <ellipse cx={106} cy={151} rx={16} ry={10.5} fill={C.hoof} stroke={C.choco} strokeWidth={4.5} transform="rotate(20 106 151)" />
-          <ellipse cx={154} cy={151} rx={16} ry={10.5} fill={C.hoof} stroke={C.choco} strokeWidth={4.5} transform="rotate(-20 154 151)" />
-          <path d="M114 157 l6 3.5 M146 157 l-6 3.5" stroke={C.choco} strokeWidth={3.4} strokeLinecap="round" fill="none" />
-        </g>
-
-        {/* ---- 顔 ---- */}
-        <ellipse cx={130} cy={112} rx={32} ry={28} fill="url(#spFace)" />
-        {/* まえがみ（スカラップ） */}
-        <g>
-          {WOOL_BANG.map(([x, y, r], i) => <circle key={i} cx={x} cy={y} r={r} fill="url(#spWool)" stroke={C.choco} strokeWidth={4} />)}
-        </g>
-        {/* あたまの羊毛 */}
-        <WoolCircles list={WOOL_HEAD} fill="url(#spWool)" />
-
-        {/* ---- 耳（羊毛の上に見えるたれ耳） ---- */}
-        {EARS.map((e, i) => (
-          <g key={i} transform={`rotate(${i === 0 ? 18 : -18} ${e.cx} ${e.cy})`}>
-            <ellipse cx={e.cx} cy={e.cy + 6} rx={19} ry={10} fill="url(#spFace)" stroke={C.choco} strokeWidth={4} />
-            <ellipse cx={e.cx + (i === 0 ? -4 : 4)} cy={e.cy + 7} rx={9.5} ry={4.8} fill={C.cheek} opacity={.5} />
+        {/* ---- ひつじ本体（感情ごとのボディアクションを一括適用） ---- */}
+        <g style={bodyAnim ? { animation: bodyAnim, transformBox: 'fill-box', transformOrigin: '50% 85%' } : null}>
+          {/* もこもこ輪郭（背面の茶色シルエット） */}
+          <g>
+            <WoolCircles list={WOOL_BODY} fill={C.choco} extra={5} />
+            <WoolCircles list={WOOL_HEAD} fill={C.choco} extra={5} />
+            {EARS.map((e, i) => (
+              <ellipse key={i} cx={e.cx} cy={e.cy} rx={24} ry={14} fill={C.choco} transform={`rotate(${e.rot} ${e.cx} ${e.cy})`} />
+            ))}
+            <WoolCircles list={WOOL_BANG} fill={C.choco} extra={4.5} />
           </g>
-        ))}
 
-        {/* ---- 表情 ---- */}
-        <SoupyEyes mood={mood} />
-        <ellipse cx={99} cy={127} rx={8.5} ry={5.8} fill={C.cheek} opacity={.85} />
-        <ellipse cx={161} cy={127} rx={8.5} ry={5.8} fill={C.cheek} opacity={.85} />
-        <ellipse cx={130} cy={124} rx={3.4} ry={2.5} fill={C.chocoDark} />
-        {mood === 'excited'
-          ? <path d="M122 130 q8 9 16 0 z" fill="#a2664a" stroke={C.chocoDark} strokeWidth={3} strokeLinejoin="round" />
-          : <path d="M123 130 q7 5.5 14 0" stroke={C.chocoDark} strokeWidth={3.2} strokeLinecap="round" fill="none" />}
+          {/* からだ（呼吸アニメーション） */}
+          <g style={animate ? { animation: 'breathe 3.4s ease-in-out infinite', transformBox: 'fill-box', transformOrigin: '50% 90%' } : null}>
+            <WoolCircles list={WOOL_BODY} fill="url(#spWool)" />
+          </g>
 
-        {/* ---- きせかえ ---- */}
-        {wearing.map(id => <SoupyAccessory key={id} id={id} />)}
+          {/* 抱いている毛布（ネイビー×金の三日月 = ブランドの象徴） */}
+          <g>
+            <path d="M86 152 Q130 166 174 152 Q198 170 194 202 Q188 234 130 238 Q72 234 66 202 Q62 170 86 152 Z"
+              fill={pink ? 'url(#spBlanketPink)' : 'url(#spBlanket)'} stroke="#10192e" strokeWidth={4} strokeLinejoin="round" />
+            <path d="M86 152 Q130 166 174 152" fill="none" stroke={pink ? '#fdeef2' : '#d9b45c'} strokeWidth={3.5} strokeLinecap="round" />
+            <path d="M97 176 Q122 188 118 218" fill="none" stroke="rgba(255,255,255,.09)" strokeWidth={5} strokeLinecap="round" />
+            <path d="M163 174 Q148 192 152 216" fill="none" stroke="rgba(255,255,255,.09)" strokeWidth={5} strokeLinecap="round" />
+            {pink ? (
+              <g fill="#fff" opacity={.75}>
+                <text x={118} y={206} fontSize={15}>♡</text>
+                <text x={142} y={192} fontSize={11}>♡</text>
+              </g>
+            ) : (
+              <path d="M138 184 a13 13 0 1 0 7 17 a10 10 0 1 1 -7 -17 Z" fill="url(#spMoon)" transform="rotate(-14 138 194)" />
+            )}
+          </g>
+
+          {/* まえあし（毛布をぎゅっと抱く） */}
+          <g>
+            <ellipse cx={106} cy={151} rx={16} ry={10.5} fill={C.hoof} stroke={C.choco} strokeWidth={4.5} transform="rotate(20 106 151)" />
+            <ellipse cx={154} cy={151} rx={16} ry={10.5} fill={C.hoof} stroke={C.choco} strokeWidth={4.5} transform="rotate(-20 154 151)" />
+            <path d="M114 157 l6 3.5 M146 157 l-6 3.5" stroke={C.choco} strokeWidth={3.4} strokeLinecap="round" fill="none" />
+          </g>
+
+          {/* 顔 */}
+          <ellipse cx={130} cy={112} rx={32} ry={28} fill="url(#spFace)" />
+          {/* まえがみ（スカラップ） */}
+          <g>
+            {WOOL_BANG.map(([x, y, r], i) => <circle key={i} cx={x} cy={y} r={r} fill="url(#spWool)" stroke={C.choco} strokeWidth={4} />)}
+          </g>
+          {/* あたまの羊毛 */}
+          <WoolCircles list={WOOL_HEAD} fill="url(#spWool)" />
+
+          {/* 耳（たれ耳・タップでぴこっと動く） */}
+          <g key={'ears' + bounce} style={bounce ? { animation: 'ear-flick .7s ease-out', transformBox: 'fill-box', transformOrigin: '50% 30%' } : null}>
+            {EARS.map((e, i) => (
+              <g key={i} transform={`rotate(${i === 0 ? 18 : -18} ${e.cx} ${e.cy})`}>
+                <ellipse cx={e.cx} cy={e.cy + 6} rx={19} ry={10} fill="url(#spFace)" stroke={C.choco} strokeWidth={4} />
+                <ellipse cx={e.cx + (i === 0 ? -4 : 4)} cy={e.cy + 7} rx={9.5} ry={4.8} fill={C.cheek} opacity={.5} />
+              </g>
+            ))}
+          </g>
+
+          {/* ---- 表情（リグ） ---- */}
+          <SoupyBrows kind={E.brow} />
+          <SoupyEyesRig type={E.eyes} blinking={blinking} />
+          <ellipse cx={99} cy={127} rx={E.cheek > 1 ? 9.5 : 8.5} ry={E.cheek > 1 ? 6.4 : 5.8} fill={C.cheek} opacity={Math.min(E.cheek, 1)} />
+          <ellipse cx={161} cy={127} rx={E.cheek > 1 ? 9.5 : 8.5} ry={E.cheek > 1 ? 6.4 : 5.8} fill={C.cheek} opacity={Math.min(E.cheek, 1)} />
+          <ellipse cx={130} cy={124} rx={3.4} ry={2.5} fill={C.chocoDark} />
+          <SoupyMouth kind={E.mouth} talking={talking && !reaction} />
+
+          {/* きせかえ */}
+          {wearing.map(id => <SoupyAccessory key={id} id={id} />)}
+        </g>
+
+        {/* ---- エフェクト（キラキラ・汗・びっくりマーク） ---- */}
+        <SoupyEmote kind={E.emote} />
 
         {/* ---- Zzz ---- */}
         {zzz && (
@@ -1508,48 +1656,44 @@ function ParallaxTilt({ children, max = 7, className = '' }) {
   );
 }
 
-/* キャラクター表示の自動アップグレードフック（http(s)配信時のみ）:
-   ① assets/soupy.webm / soupy.mp4 …… リール級のアニメーション動画（最優先）
-   ② assets/soupy.glb ……………………… リアルタイム3D（model-viewer）
-   ③ SVGスーピーくん + 擬似3Dチルト … どの環境でも動くフォールバック */
+/* ヒーロー表示：表情リグつきSVGスーピーくんが主役。
+   公式リール動画（assets/soupy.webm / soupy.mp4）が置いてある場合は
+   「ムービー」ボタンからモーダルで再生できる（観る用の最高画質）。 */
 function Soupy3DOrSvg(props) {
-  const [mode, setMode] = useState('svg'); // svg | glb | video
-  const [videoSrc, setVideoSrc] = useState(null);
+  const [reelSrc, setReelSrc] = useState(null);
+  const [openReel, setOpenReel] = useState(false);
   useEffect(() => {
     if (location.protocol === 'file:') return;
     let cancelled = false;
     const head = (u) => fetch(u, { method: 'HEAD' }).then(r => r.ok).catch(() => false);
     (async () => {
       for (const src of ['assets/soupy.webm', 'assets/soupy.mp4']) {
-        if (await head(src)) { if (!cancelled) { setVideoSrc(src); setMode('video'); } return; }
-      }
-      if (await head('assets/soupy.glb')) {
-        const s = document.createElement('script');
-        s.type = 'module'; s.src = 'vendor/model-viewer.min.js';
-        s.onload = () => { if (!cancelled) setMode('glb'); };
-        document.head.appendChild(s);
+        if (await head(src)) { if (!cancelled) setReelSrc(src); return; }
       }
     })();
     return () => { cancelled = true; };
   }, []);
-  if (mode === 'video') {
-    return (
-      <video src={videoSrc} autoPlay muted loop playsInline onError={() => setMode('svg')}
-        onClick={props.onTap}
-        style={{ width: props.size * 0.92, height: props.size * 1.3, objectFit: 'cover', borderRadius: 14,
-          border: '1px solid rgba(217,180,92,.4)', boxShadow: '0 22px 48px rgba(0,0,0,.5)', display: 'inline-block' }} />
-    );
-  }
-  if (mode === 'glb') {
-    return (
-      <model-viewer
-        ref={el => { if (el && !el.__spErrHooked) { el.__spErrHooked = true; el.addEventListener('error', () => setMode('svg')); } }}
-        src="assets/soupy.glb" autoplay camera-controls disable-zoom auto-rotate auto-rotate-delay="1500"
-        interaction-prompt="none" shadow-intensity="1" exposure="1.05"
-        camera-orbit="0deg 82deg 105%" style={{ width: props.size, height: props.size * (270 / 260), display: 'inline-block' }} />
-    );
-  }
-  return <ParallaxTilt max={6}><Soupy {...props} /></ParallaxTilt>;
+  return (
+    <div className="relative inline-block">
+      <ParallaxTilt max={6}><Soupy {...props} /></ParallaxTilt>
+      {reelSrc && (
+        <button onClick={(e) => { e.stopPropagation(); setOpenReel(true); }}
+          className="btn-press absolute top-0 -right-2 flex items-center gap-1 px-2.5 py-1 rounded-full bg-night-900/70 border border-moon-400/40 text-[9.5px] font-bold text-moon-300" aria-label="公式ムービーを見る">
+          <Icon name="play" size={10} />ムービー
+        </button>
+      )}
+      <Modal open={openReel} onClose={() => setOpenReel(false)}>
+        <p className="kicker">Official Movie</p>
+        <h3 className="text-[15px] font-bold text-cream-50 mt-0.5 mb-3">スーピーくん ムービー</h3>
+        {openReel && (
+          <video src={reelSrc} autoPlay muted loop playsInline controls
+            onError={() => setOpenReel(false)}
+            style={{ width: '100%', borderRadius: 12, border: '1px solid rgba(217,180,92,.4)' }} />
+        )}
+        <div className="mt-3"><Btn kind="ghost" full onClick={() => setOpenReel(false)}>とじる</Btn></div>
+      </Modal>
+    </div>
+  );
 }
 
 // 夜空の背景（星がまたたく）
@@ -1823,12 +1967,15 @@ function calcStreak(state) {
   return n;
 }
 function soupyMoodOf(state) {
+  const hour = new Date().getHours();
+  if (hour >= 22 || hour < 5) return 'sleep';            // 夜はいっしょにおやすみモード
   const logs = recentLogs(state, 3);
-  if (!logs.length) return 'sleep';
+  if (!logs.length) return 'calm';
   const a = avg(logs.map(l => l.score));
+  if (a >= 78 && calcStreak(state) >= 7) return 'proud';  // 好調×連続記録 → えっへん
   if (a >= 78) return 'happy';
-  if (a < 55) return 'tired';
-  return 'sleep';
+  if (a < 55) return 'worried';                           // 不調 → いっしょに心配
+  return 'calm';
 }
 function friendshipOf(state) {
   const totalPets = (state.xpLog || []).filter(x => x.reason === 'なでなで').length;
@@ -2208,6 +2355,8 @@ function HomeScreen() {
   if (friendship >= 5) bubbles.push('きみはぼくのいちばんのともだち！ずっといっしょに整えようね');
   if (!bubbles.length) bubbles.push('ぐっすりねむれるからだ、いっしょにつくろうね');
   const bubble = isStore ? 'ようこそSLEEPYへ！きょうもいっしょに整えよう' : bubbles[new Date().getDate() % bubbles.length];
+  const [talking, setTalking] = useState(true);
+  useEffect(() => { setTalking(true); const tm = setTimeout(() => setTalking(false), 2400); return () => clearTimeout(tm); }, [bubble]);
 
   const pet = () => {
     if (xpCountToday(state, 'なでなで') >= 5) return;
@@ -2242,7 +2391,7 @@ function HomeScreen() {
             <SpeechBubble text={bubble} />
           </div>
           <div className="flex items-end justify-center pb-1">
-            <Soupy3DOrSvg size={168} mood={mood} wearing={state.soupy.wearing} onTap={pet} scene="moon" title="スーピーくんをなでる" />
+            <Soupy3DOrSvg size={168} mood={mood} wearing={state.soupy.wearing} onTap={pet} scene="moon" title="スーピーくんをなでる" talking={talking} />
           </div>
           <div className="flex items-center justify-center gap-2 pb-3">
             <span className="text-[10.5px] font-bold px-2.5 py-1 rounded-full bg-night-900/60 text-moon-300 border border-moon-400/30">Lv.{lv} {stageTitle(lv)}</span>
