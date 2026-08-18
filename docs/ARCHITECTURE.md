@@ -65,6 +65,9 @@ flowchart LR
 | orders / subscriptions | user_id, items, total, delivery / plan_id, since | orders / subscription |
 | prescriptions | user_id, items[], date, until | prescription |
 | xp_events | user_id, date, amount, reason | xpLog |
+| staff | id, name, role, employment_type, color, hourly_wage, skills[], active | staff（管理側） |
+| shifts / shift_patterns | staff_id, date, kind(work/off/wish_off), start, end, note / name, start, end | shifts / shiftPatterns（管理側） |
+| shop_settings | open, close, closed_days[], min_staff | shopHours（管理側） |
 
 - **Row Level Security**: お客さまは自分の行のみ読み書き可。staff_memoなど管理専用カラムは顧客ロールから不可視
 - 姿勢画像はストレージに保存しURLのみDBへ（現行のbase64保存を置換）

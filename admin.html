@@ -2,7 +2,8 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d1424">
 <meta name="theme-color" content="#0d1424">
 <title>SLEEPY 管理コンソール | スタッフ用</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='48' fill='%230d1424'/%3E%3Cpath d='M63 20a34 34 0 1 0 17 44A28 28 0 0 1 63 20z' fill='%2325a08c'/%3E%3C/svg%3E">
@@ -57,9 +58,32 @@ tailwind.config = {
   .card-deep { background:#1a2440; border:1px solid rgba(199,206,222,.10); border-radius:10px; }
   .btn-press { transition: transform .12s ease; }
   .btn-press:active { transform: scale(.96); }
-  #toast-root { position:fixed; top:14px; left:50%; transform:translateX(-50%); z-index:9999; display:flex; flex-direction:column; gap:8px; pointer-events:none; width:min(92vw,420px); }
-  .toast { pointer-events:auto; padding:11px 16px; border-radius:14px; color:#0d1424; font-size:13px; font-weight:700; box-shadow:0 10px 30px rgba(0,0,0,.45); animation:pop-in .3s cubic-bezier(.2,1.4,.4,1); background:#faf3e3; }
+  #toast-root { position:fixed; top:max(14px, env(safe-area-inset-top)); left:50%; transform:translateX(-50%); z-index:9999; display:flex; flex-direction:column; align-items:center; gap:8px; pointer-events:none; width:min(92vw,420px); }
+  .toast { pointer-events:auto; width:fit-content; max-width:100%; padding:9px 16px 9px 12px; border-radius:999px; color:#0d1424; font-size:12.5px; font-weight:700; box-shadow:0 10px 30px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.35); animation:toast-in .34s cubic-bezier(.2,1.4,.4,1); background:#faf3e3; display:flex; align-items:center; gap:7px; }
+  .toast svg { flex-shrink:0; }
+  @keyframes toast-in { 0% { opacity:0; transform:translateY(-10px) scale(.92);} 100% { opacity:1; transform:translateY(0) scale(1);} }
   .toast-err { background:#f5b0a0; }
+
+  /* ---- UXポリッシュ (v8.1) ---- */
+  html { -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; }
+  * { -webkit-tap-highlight-color: transparent; }
+  ::selection { background:rgba(238,194,90,.35); color:#fdfbf5; }
+  :focus-visible { outline:2px solid rgba(238,194,90,.85); outline-offset:2px; border-radius:6px; }
+  :focus:not(:focus-visible) { outline:none; }
+  h1, h2, h3 { font-feature-settings:"palt"; letter-spacing:.01em; }
+  .tnum { font-variant-numeric: tabular-nums; }
+  .anim-screen { animation: screen-in .22s ease-out both; }
+  @keyframes screen-in { 0% { opacity:0; transform:translateY(6px);} 100% { opacity:1; transform:translateY(0);} }
+  button.card { transition: border-color .16s ease, background-color .16s ease; }
+  button.card:hover { border-color: rgba(238,194,90,.30); }
+  @media (min-width: 768px) {
+    ::-webkit-scrollbar { width:10px; height:10px; }
+    ::-webkit-scrollbar-thumb { background:#2c3a5c; border-radius:8px; border:2px solid #0d1424; }
+    ::-webkit-scrollbar-track { background:transparent; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; scroll-behavior:auto !important; }
+  }
   .viz-tip { position:absolute; z-index:20; background:#0d1424; border:1px solid rgba(199,206,222,.18); color:#eef1f8; font-size:11px; font-weight:700; padding:6px 10px; border-radius:10px; pointer-events:none; white-space:nowrap; transform:translate(-50%,-110%); }
   .viz-tip .tip-sub { color:#8b96b8; font-weight:500; }
 </style>
@@ -153,6 +177,7 @@ function IconTile({ name, size = 40, iconSize, className = '', tone = 'default' 
     default: 'bg-night-500/70 text-cream-100',
     gold: 'bg-moon-400/12 text-moon-300 border border-moon-400/30',
     dim: 'bg-night-500/50 text-night-100',
+    red: 'bg-csymp/12 text-[#f0968c] border border-csymp/30',
   };
   return (
     <span className={`inline-flex items-center justify-center rounded-[10px] ${tones[tone]} ${className}`}
@@ -201,9 +226,13 @@ function toast(msg, type) {
   const root = document.getElementById('toast-root');
   const el = document.createElement('div');
   el.className = 'toast' + (type === 'err' ? ' toast-err' : '');
-  el.textContent = msg;
+  const ic = type === 'err'
+    ? '<circle cx="12" cy="12" r="8.6"/><path d="M12 7.6v5.2M12 15.9v.4"/>'
+    : '<path d="m4.5 12.8 4.6 4.6L19.5 6.6"/>';
+  el.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0d1424" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">' + ic + '</svg><span></span>';
+  el.lastChild.textContent = msg;
   root.appendChild(el);
-  setTimeout(() => { el.style.transition='opacity .3s'; el.style.opacity='0'; setTimeout(()=>el.remove(), 320); }, 2600);
+  setTimeout(() => { el.style.transition='opacity .3s, transform .3s'; el.style.opacity='0'; el.style.transform='translateY(-6px)'; setTimeout(()=>el.remove(), 320); }, 2600);
 }
 
 // 行動チェック（スコア計算・表示ラベル用の要約版）
@@ -512,12 +541,65 @@ function seedAdmin() {
   return { version: 1, pin: '1234', customers, createdAt: todayStr() };
 }
 
+/* ---- スタッフ・シフト管理のマスタとシード ---- */
+const STAFF_ROLES = ['店長', '施術スタッフ', '受付', 'トレーナー'];
+const STAFF_TYPES = ['正社員', 'パート', '業務委託'];
+const STAFF_COLORS = ['#eec25a', '#6d82ec', '#25a08c', '#df5346', '#8f7bd8', '#e79aad', '#4cc2ae', '#c98d5f'];
+const STAFF_SKILLS = ['施術', 'カウンセリング', '姿勢分析', '受付', '物販'];
+const SHIFT_KIND_LABEL = { work: '出勤', off: '休み', wish_off: '希望休' };
+
+const mondayOf = (s) => { const d = new Date(s + 'T12:00:00'); return addDays(s, -((d.getDay() + 6) % 7)); };
+const weekDatesOf = (monday) => Array.from({ length: 7 }, (_, i) => addDays(monday, i));
+const dowOf = (s) => new Date(s + 'T12:00:00').getDay();
+const hmToMin = (t) => { const [h, m] = String(t || '0:0').split(':').map(Number); return h * 60 + m; };
+const shiftHours = (sh) => sh.kind === 'work' ? Math.max(0, (hmToMin(sh.end) - hmToMin(sh.start)) / 60) : 0;
+
+function defaultStaffData() {
+  const mk = (name, kana, role, type, color, hourly, phone, skills, note) =>
+    ({ id: uid(), name, kana, role, type, color, hourly, phone, skills, note, active: true, createdAt: todayStr() });
+  const staff = [
+    mk('山田 ひかり', 'やまだ ひかり', '店長', '正社員', '#eec25a', 0, '090-1000-2000', ['施術', 'カウンセリング', '姿勢分析'], '責任者。新規のカウンセリングは基本山田が担当'),
+    mk('佐々木 蓮', 'ささき れん', '施術スタッフ', '正社員', '#6d82ec', 0, '080-3000-4000', ['施術', '姿勢分析'], ''),
+    mk('中村 あおい', 'なかむら あおい', '受付', 'パート', '#25a08c', 1250, '070-5000-6000', ['受付', '物販'], '火・木は16時までの希望'),
+    mk('川口 えみ', 'かわぐち えみ', '施術スタッフ', 'パート', '#e79aad', 1600, '090-7000-8000', ['施術'], ''),
+  ];
+  const shiftPatterns = [
+    { id: 'pt_early', name: '早番', start: '10:00', end: '15:00' },
+    { id: 'pt_late', name: '遅番', start: '14:00', end: '20:00' },
+    { id: 'pt_full', name: '通し', start: '10:00', end: '20:00' },
+    { id: 'pt_am', name: '午前のみ', start: '10:00', end: '13:00' },
+  ];
+  const shifts = {};
+  const mon = mondayOf(todayStr());
+  for (let w = -1; w <= 1; w++) {
+    for (let d = 0; d < 7; d++) {
+      const date = addDays(mon, w * 7 + d);
+      if (dowOf(date) === 3) continue; // 水曜定休
+      const list = [];
+      staff.forEach((st, i) => {
+        const r = (i * 7 + d + (w + 1) * 3) % 5;
+        if (r === 4) { list.push({ id: uid(), staffId: st.id, kind: 'off' }); return; }
+        const pt = i === 2 ? shiftPatterns[0] : r === 0 ? shiftPatterns[2] : r === 1 ? shiftPatterns[0] : shiftPatterns[1];
+        list.push({ id: uid(), staffId: st.id, kind: 'work', start: pt.start, end: pt.end, note: '' });
+      });
+      shifts[date] = list;
+    }
+  }
+  return { staff, shiftPatterns, shifts, shopHours: { open: '10:00', close: '20:00', closedDays: [3], minStaff: 2 } };
+}
+
 function loadAdmin() {
   try {
     const raw = localStorage.getItem(ADMIN_KEY);
-    if (raw) { const st = JSON.parse(raw); if (st && st.version === 1) return st; }
+    if (raw) {
+      const st = JSON.parse(raw);
+      if (st && st.version === 1) {
+        if (!st.staff) Object.assign(st, defaultStaffData()); // 既存データにスタッフ・シフトを追補
+        return st;
+      }
+    }
   } catch (e) { console.warn(e); }
-  const st = seedAdmin();
+  const st = Object.assign(seedAdmin(), defaultStaffData());
   try { localStorage.setItem(ADMIN_KEY, JSON.stringify(st)); } catch (e) {}
   return st;
 }
@@ -544,6 +626,34 @@ function followUpsOf(c) {
   });
   const sc = avgScoreOf(c);
   if (sc != null && sc < 55) out.push({ type:'score', label:`平均スコア${sc}点と低め` });
+  return out;
+}
+
+/* ---- シフト派生データ ---- */
+const dayShiftsOf = (admin, date) => (admin.shifts || {})[date] || [];
+const staffById = (admin, id) => (admin.staff || []).find(s => s.id === id);
+const activeStaff = (admin) => (admin.staff || []).filter(s => s.active);
+const isClosedDay = (admin, date) => ((admin.shopHours || {}).closedDays || []).includes(dowOf(date));
+const workersOf = (admin, date) => dayShiftsOf(admin, date).filter(x => x.kind === 'work' && staffById(admin, x.staffId));
+
+function weekHoursOf(admin, staffId, monday) {
+  return weekDatesOf(monday).reduce((a, dt) => a + dayShiftsOf(admin, dt).filter(x => x.staffId === staffId).reduce((b, x) => b + shiftHours(x), 0), 0);
+}
+function monthDatesOf(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  const last = new Date(y, m, 0).getDate();
+  return Array.from({ length: last }, (_, i) => `${ym}-${String(i + 1).padStart(2, '0')}`);
+}
+function dayWarningsOf(admin, date) {
+  const out = [];
+  const hrs = admin.shopHours || {};
+  if (isClosedDay(admin, date) || date < todayStr()) return out; // 過去日は警告しない
+  const workers = workersOf(admin, date);
+  if (workers.length < (hrs.minStaff || 1)) out.push({ type: 'under', label: `人員${workers.length}名（最低${hrs.minStaff || 1}名）` });
+  workers.forEach(w => {
+    if (hrs.open && hmToMin(w.start) < hmToMin(hrs.open)) out.push({ type: 'hours', label: `${staffById(admin, w.staffId)?.name}が開店前から` });
+    if (hrs.close && hmToMin(w.end) > hmToMin(hrs.close)) out.push({ type: 'hours', label: `${staffById(admin, w.staffId)?.name}が閉店後まで` });
+  });
   return out;
 }
 
@@ -601,14 +711,14 @@ function Modal({ open, onClose, children, wide }) {
   );
 }
 function EmptyState({ icon = 'zzz', text, sub }) {
-  return <div className="py-7 text-center"><div className="mb-2.5 flex justify-center"><Icon name={icon} size={28} className="text-night-300" strokeWidth={1.4} /></div>
+  return <div className="py-5 text-center"><div className="mb-2.5 flex justify-center"><Icon name={icon} size={28} className="text-night-300" strokeWidth={1.4} /></div>
     <p className="text-[12.5px] font-bold text-night-100">{text}</p>{sub && <p className="text-[10.5px] text-night-200 mt-1">{sub}</p>}</div>;
 }
-function StatTile({ label, value, unit, sub, accent, onClick }) {
+function StatTile({ label, value, unit, sub, accent, onClick, icon }) {
   return (
     <button onClick={onClick} className={`card p-3.5 text-left w-full ${onClick ? 'btn-press' : 'cursor-default'}`}>
-      <p className="text-[10px] font-bold text-night-200">{label}</p>
-      <p className="text-[24px] leading-tight font-bold mt-1" style={{ color: accent || '#eef1f8' }}>{value}<span className="text-[11px] font-bold text-night-200 ml-0.5">{unit}</span></p>
+      <p className="text-[10px] font-bold text-night-200 flex items-center justify-between gap-1">{label}{icon && <Icon name={icon} size={13} className="text-moon-300/70 shrink-0" />}</p>
+      <p className="tnum text-[24px] leading-tight font-bold mt-1" style={{ color: accent || '#eef1f8' }}>{value}<span className="text-[11px] font-bold text-night-200 ml-0.5">{unit}</span></p>
       {sub && <p className="text-[9.5px] text-night-300 mt-0.5">{sub}</p>}
     </button>
   );
@@ -802,6 +912,41 @@ function CounselInbox() {
   );
 }
 
+/* ---- 本日の出勤（ダッシュボード用） ---- */
+function TodayStaffCard() {
+  const { admin, nav } = useApp();
+  const t = todayStr();
+  const closed = isClosedDay(admin, t);
+  const ws = workersOf(admin, t).slice().sort((a, b) => hmToMin(a.start) - hmToMin(b.start));
+  const warns = dayWarningsOf(admin, t);
+  return (
+    <div className="mt-4">
+      <SectionTitle icon="users" en="Today's Staff" title="本日の出勤"
+        sub={closed ? '本日は定休日です' : `${ws.length}名が出勤予定`}
+        right={<Btn small kind="ghost" onClick={() => nav('staff')}><Icon name="calendar" size={12} className="mr-1" />シフト表へ</Btn>} />
+      {closed
+        ? <div className="card px-4 py-3 text-[11.5px] font-bold text-night-200">定休日（シフトはありません）</div>
+        : ws.length === 0
+          ? <div className="card px-4 py-3 text-[11.5px] font-bold text-[#f0968c]">本日の出勤が未設定です。シフト表から設定してください。</div>
+          : (
+            <div className="card p-3 flex flex-wrap gap-2">
+              {ws.map(w => {
+                const st = staffById(admin, w.staffId);
+                return st && (
+                  <span key={w.id} className="flex items-center gap-2 rounded-full pl-1 pr-3 py-1 border" style={{ background: st.color + '14', borderColor: st.color + '55' }}>
+                    <StaffAvatar st={st} size={26} />
+                    <span className="text-[11.5px] font-bold text-cream-50">{st.name}</span>
+                    <span className="text-[10.5px] font-bold tnum" style={{ color: st.color }}>{w.start}〜{w.end}</span>
+                  </span>
+                );
+              })}
+              {warns.some(w => w.type === 'under') && <Badge tone="red">最低人数を下回っています</Badge>}
+            </div>
+          )}
+    </div>
+  );
+}
+
 /* ---- ダッシュボード ---- */
 function Dashboard() {
   const { admin, nav } = useApp();
@@ -819,15 +964,17 @@ function Dashboard() {
     <div className="anim-slide-up">
       <SectionTitle icon="chart" en="Dashboard" title="ダッシュボード" sub={fmtJP(t)} />
       <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5">
-        <StatTile label="顧客数" value={cs.length} unit="名" onClick={() => nav('customers')} />
-        <StatTile label="本日の来店" value={todayVisits.length} unit="件" accent={todayVisits.length ? '#f6d97e' : undefined} />
-        <StatTile label="直近30日の来店" value={monthVisits} unit="件" />
-        <StatTile label="直近30日の物販売上" value={monthSales.toLocaleString()} unit="円" onClick={() => nav('sales')} />
-        <StatTile label="サブスク月額(MRR)" value={mrr.toLocaleString()} unit="円" onClick={() => nav('sales')} />
-        <StatTile label="要フォロー" value={follows.length} unit="名" accent={follows.length ? '#f0968c' : '#4cc2ae'} />
+        <StatTile icon="users" label="顧客数" value={cs.length} unit="名" onClick={() => nav('customers')} />
+        <StatTile icon="building" label="本日の来店" value={todayVisits.length} unit="件" accent={todayVisits.length ? '#f6d97e' : undefined} />
+        <StatTile icon="calendar" label="直近30日の来店" value={monthVisits} unit="件" />
+        <StatTile icon="bag" label="直近30日の物販売上" value={monthSales.toLocaleString()} unit="円" onClick={() => nav('sales')} />
+        <StatTile icon="card" label="サブスク月額(MRR)" value={mrr.toLocaleString()} unit="円" onClick={() => nav('sales')} />
+        <StatTile icon="bell" label="要フォロー" value={follows.length} unit="名" accent={follows.length ? '#f0968c' : '#4cc2ae'} />
       </div>
 
       {/* カウンセリング受信箱 */}
+      <TodayStaffCard />
+
       <CounselInbox />
 
       <div className="grid md:grid-cols-2 gap-3 mt-4">
@@ -1832,6 +1979,43 @@ function Sales() {
 }
 
 /* ---- 設定 ---- */
+function ShopHoursCard() {
+  const { admin, update } = useApp();
+  const h = admin.shopHours || { open: '10:00', close: '20:00', closedDays: [], minStaff: 1 };
+  const [open, setOpen] = useState(h.open);
+  const [close, setClose] = useState(h.close);
+  const [closedDays, setClosedDays] = useState(h.closedDays || []);
+  const [minStaff, setMinStaff] = useState(h.minStaff || 1);
+  const inp = "bg-night-600 border border-night-400/50 rounded-[9px] px-3 py-2 text-[13px] font-bold text-cream-50 outline-none focus:border-moon-400";
+  const save = () => {
+    if (hmToMin(open) >= hmToMin(close)) { toast('閉店は開店より後にしてください', 'err'); return; }
+    update(st => { st.shopHours = { open, close, closedDays, minStaff: Math.max(1, Number(minStaff) || 1) }; });
+    toast('営業時間の設定を保存しました');
+  };
+  return (
+    <div className="card p-4 mt-3">
+      <p className="text-[11.5px] font-bold text-cream-50 mb-2 flex items-center gap-1.5"><Icon name="clock" size={13} className="text-moon-300" />営業時間・シフト設定</p>
+      <div className="flex items-center gap-2">
+        <input type="time" value={open} onChange={e => setOpen(e.target.value)} className={inp} />
+        <span className="text-night-200 font-bold">〜</span>
+        <input type="time" value={close} onChange={e => setClose(e.target.value)} className={inp} />
+        <label className="flex items-center gap-1.5 ml-2">
+          <span className="text-[10.5px] font-bold text-night-200">最低人数</span>
+          <input type="number" min="1" value={minStaff} onChange={e => setMinStaff(e.target.value)} className={inp + ' w-16 tnum'} />
+        </label>
+      </div>
+      <p className="text-[10.5px] font-bold text-night-200 mt-3 mb-1.5">定休日</p>
+      <div className="flex gap-1.5">
+        {['日','月','火','水','木','金','土'].map((w, i) => (
+          <Chip key={w} active={closedDays.includes(i)} onClick={() => setClosedDays(closedDays.includes(i) ? closedDays.filter(x => x !== i) : [...closedDays, i])}>{w}</Chip>
+        ))}
+      </div>
+      <div className="mt-3"><Btn small onClick={save}>保存する</Btn></div>
+      <p className="text-[9.5px] text-night-300 mt-2">シフト表の営業時間外アラート・人員不足アラートに反映されます。</p>
+    </div>
+  );
+}
+
 function AdminSettings() {
   const { admin, update, replaceAll } = useApp();
   const [pin, setPin] = useState(admin.pin);
@@ -1847,6 +2031,7 @@ function AdminSettings() {
           <Btn small onClick={() => { if (pin.length !== 4) { toast('4桁で入力してください', 'err'); return; } update(st => { st.pin = pin; }); toast('PINを変更しました'); }}>変更する</Btn>
         </div>
       </div>
+      <ShopHoursCard />
       <div className="card p-4 mt-3 flex flex-col gap-2">
         <Btn kind="ghost" full onClick={() => setConfirm(true)}><Icon name="refresh" size={14} className="mr-1" />デモ顧客データをリセット</Btn>
         <a href="index.html" className="btn-press inline-flex items-center justify-center gap-1.5 font-bold rounded-[9px] px-4 py-2.5 text-[13px] w-full bg-night-600 text-cream-50 border border-night-400/40"><Icon name="phone" size={14} className="mr-1" />顧客向けアプリをひらく</a>
@@ -1871,10 +2056,530 @@ function AdminSettings() {
   );
 }
 
+/* ============================================================
+   スタッフ登録・シフト管理
+   ============================================================ */
+function StaffAvatar({ st, size = 34 }) {
+  return (
+    <span className="rounded-full flex items-center justify-center font-bold shrink-0"
+      style={{ width: size, height: size, background: st.color + '2b', color: st.color, border: `1.5px solid ${st.color}66`, fontSize: size * 0.38 }}>
+      {st.name.slice(0, 1)}
+    </span>
+  );
+}
+
+/* シフト1コマの編集モーダル（パターン即割当 / カスタム時間 / 休み・希望休） */
+function ShiftEditModal({ target, onClose }) {
+  const { admin, update } = useApp();
+  const st = target && staffById(admin, target.staffId);
+  const cur = target ? dayShiftsOf(admin, target.date).find(x => x.staffId === target.staffId) : null;
+  const [start, setStart] = useState('10:00');
+  const [end, setEnd] = useState('20:00');
+  const [note, setNote] = useState('');
+  useEffect(() => {
+    if (!target) return;
+    setStart(cur && cur.kind === 'work' ? cur.start : '10:00');
+    setEnd(cur && cur.kind === 'work' ? cur.end : '20:00');
+    setNote(cur?.note || '');
+  }, [target && target.date, target && target.staffId]);
+  if (!target || !st) return null;
+
+  const setShift = (rec) => {
+    update(a => {
+      a.shifts = a.shifts || {};
+      const list = (a.shifts[target.date] || []).filter(x => x.staffId !== target.staffId);
+      if (rec) list.push({ id: uid(), staffId: target.staffId, note: note.trim(), ...rec });
+      a.shifts[target.date] = list;
+    });
+    onClose();
+  };
+  const hrs = admin.shopHours || {};
+  const customWarn = hmToMin(start) >= hmToMin(end) ? '終了は開始より後にしてください'
+    : (hrs.open && hmToMin(start) < hmToMin(hrs.open)) || (hrs.close && hmToMin(end) > hmToMin(hrs.close)) ? '営業時間外を含みます' : null;
+  const inp = "bg-night-600 border border-night-400/50 rounded-[9px] px-3 py-2 text-[13px] font-bold text-cream-50 outline-none focus:border-moon-400";
+
+  return (
+    <Modal open onClose={onClose}>
+      <div className="flex items-center gap-2.5 mb-3">
+        <StaffAvatar st={st} size={38} />
+        <div>
+          <p className="text-[14px] font-bold text-cream-50">{st.name}</p>
+          <p className="text-[10.5px] text-night-200">{fmtJP(target.date)}{isClosedDay(admin, target.date) && <Badge tone="red">定休日</Badge>}</p>
+        </div>
+      </div>
+      {cur && (
+        <div className="card-deep p-2.5 mb-3 text-[11.5px] font-bold text-night-100 flex items-center justify-between">
+          <span>現在：{cur.kind === 'work' ? `出勤 ${cur.start}〜${cur.end}` : SHIFT_KIND_LABEL[cur.kind]}{cur.note ? `（${cur.note}）` : ''}</span>
+          <button onClick={() => setShift(null)} className="btn-press text-[10.5px] font-bold text-[#f0968c]">削除</button>
+        </div>
+      )}
+      <p className="text-[10.5px] font-bold text-night-200 mb-1.5">パターンでわりあて</p>
+      <div className="grid grid-cols-2 gap-1.5">
+        {(admin.shiftPatterns || []).map(pt => (
+          <button key={pt.id} onClick={() => setShift({ kind: 'work', start: pt.start, end: pt.end })}
+            className="btn-press px-3 py-2.5 rounded-[9px] border border-night-400/40 bg-night-600 text-left hover:border-moon-400/50 transition-colors">
+            <span className="block text-[12px] font-bold text-cream-50">{pt.name}</span>
+            <span className="block text-[10px] text-night-200 tnum">{pt.start}〜{pt.end}</span>
+          </button>
+        ))}
+        <button onClick={() => setShift({ kind: 'off' })} className="btn-press px-3 py-2.5 rounded-[9px] border border-night-400/40 bg-night-600 text-left hover:border-moon-400/50 transition-colors">
+          <span className="block text-[12px] font-bold text-cream-50">休み</span><span className="block text-[10px] text-night-200">公休</span>
+        </button>
+        <button onClick={() => setShift({ kind: 'wish_off' })} className="btn-press px-3 py-2.5 rounded-[9px] border border-night-400/40 bg-night-600 text-left hover:border-moon-400/50 transition-colors">
+          <span className="block text-[12px] font-bold text-cream-50">希望休</span><span className="block text-[10px] text-night-200">本人希望</span>
+        </button>
+      </div>
+      <p className="text-[10.5px] font-bold text-night-200 mt-3.5 mb-1.5">カスタム時間</p>
+      <div className="flex items-center gap-2">
+        <input type="time" value={start} onChange={e => setStart(e.target.value)} className={inp} />
+        <span className="text-night-200 font-bold">〜</span>
+        <input type="time" value={end} onChange={e => setEnd(e.target.value)} className={inp} />
+        <Btn small kind="moon" onClick={() => { if (hmToMin(start) >= hmToMin(end)) { toast('終了は開始より後にしてください', 'err'); return; } setShift({ kind: 'work', start, end }); }}>わりあて</Btn>
+      </div>
+      {customWarn && <p className="text-[10px] font-bold text-[#f0968c] mt-1.5">{customWarn}</p>}
+      <input value={note} onChange={e => setNote(e.target.value)} placeholder="メモ（例：中抜け15-17時 / 研修）"
+        className="mt-3 w-full bg-night-600 border border-night-400/50 rounded-[9px] px-3 py-2 text-[12px] font-bold text-cream-50 outline-none focus:border-moon-400" />
+      <p className="text-[9.5px] text-night-300 mt-1">メモはわりあて時にいっしょに保存されます</p>
+    </Modal>
+  );
+}
+
+/* 週シフト表（スタッフ×曜日グリッド） */
+function ShiftWeekView() {
+  const { admin, update } = useApp();
+  const [monday, setMonday] = useState(mondayOf(todayStr()));
+  const [edit, setEdit] = useState(null);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const dates = weekDatesOf(monday);
+  const staff = activeStaff(admin);
+  const t = todayStr();
+
+  const copyPrevWeek = () => {
+    update(a => {
+      a.shifts = a.shifts || {};
+      dates.forEach(dt => {
+        const prev = a.shifts[addDays(dt, -7)] || [];
+        a.shifts[dt] = prev.filter(x => staffById(a, x.staffId)).map(x => ({ ...x, id: uid() }));
+      });
+    });
+    toast('先週のシフトをこの週にコピーしました');
+  };
+  const clearWeek = () => {
+    update(a => { a.shifts = a.shifts || {}; dates.forEach(dt => { delete a.shifts[dt]; }); });
+    setConfirmClear(false);
+    toast('この週のシフトをクリアしました');
+  };
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <Btn small kind="ghost" onClick={() => setMonday(addDays(monday, -7))} aria-label="前の週">←</Btn>
+        <p className="text-[13px] font-bold text-cream-50 tnum">{fmtMD(dates[0])} 〜 {fmtMD(dates[6])}</p>
+        <Btn small kind="ghost" onClick={() => setMonday(addDays(monday, 7))} aria-label="次の週">→</Btn>
+        <Btn small kind="ghost" onClick={() => setMonday(mondayOf(t))}>今週</Btn>
+        <span className="flex-1" />
+        <Btn small kind="ghost" onClick={copyPrevWeek}><Icon name="download" size={12} className="mr-1" />先週をコピー</Btn>
+        <Btn small kind="ghost" onClick={() => setConfirmClear(true)}><Icon name="trash" size={12} className="mr-1" />週をクリア</Btn>
+      </div>
+
+      <div className="card overflow-x-auto">
+        <div style={{ minWidth: 860 }}>
+          {/* 曜日ヘッダー */}
+          <div className="grid border-b border-night-500/60" style={{ gridTemplateColumns: '168px repeat(7, 1fr)' }}>
+            <div className="px-3 py-2 text-[10px] font-bold text-night-300">スタッフ / 週間時間</div>
+            {dates.map(dt => {
+              const closed = isClosedDay(admin, dt);
+              const warns = dayWarningsOf(admin, dt);
+              const under = warns.some(w => w.type === 'under');
+              return (
+                <div key={dt} className={`px-2 py-2 text-center border-l border-night-500/40 ${dt === t ? 'bg-moon-400/8' : ''}`}>
+                  <p className={`text-[11.5px] font-bold tnum ${dowOf(dt) === 0 ? 'text-[#f0968c]' : dowOf(dt) === 6 ? 'text-[#8fa3f0]' : 'text-cream-50'}`}>{fmtMDW(dt)}</p>
+                  {closed
+                    ? <span className="text-[9px] font-bold text-night-300">定休日</span>
+                    : <span className={`text-[9px] font-bold ${under ? 'text-[#f0968c]' : 'text-night-300'}`}>{workersOf(admin, dt).length}名出勤{under ? '・不足' : ''}</span>}
+                </div>
+              );
+            })}
+          </div>
+          {/* スタッフ行 */}
+          {staff.map(st => {
+            const wh = weekHoursOf(admin, st.id, monday);
+            const over = st.type !== '正社員' && wh > 30;
+            return (
+              <div key={st.id} className="grid border-b border-night-500/30 last:border-b-0" style={{ gridTemplateColumns: '168px repeat(7, 1fr)' }}>
+                <div className="px-3 py-2 flex items-center gap-2 min-w-0">
+                  <StaffAvatar st={st} size={30} />
+                  <div className="min-w-0">
+                    <p className="text-[11.5px] font-bold text-cream-50 truncate">{st.name}</p>
+                    <p className={`text-[9.5px] tnum font-bold ${over ? 'text-[#f0968c]' : 'text-night-300'}`}>{wh.toFixed(1)}h{over ? '・週30h超' : ''}</p>
+                  </div>
+                </div>
+                {dates.map(dt => {
+                  const closed = isClosedDay(admin, dt);
+                  const sh = dayShiftsOf(admin, dt).find(x => x.staffId === st.id);
+                  return (
+                    <button key={dt} onClick={() => setEdit({ date: dt, staffId: st.id })}
+                      className={`btn-press border-l border-night-500/30 px-1.5 py-2 min-h-[52px] flex items-center justify-center transition-colors hover:bg-night-600/50 ${closed ? 'bg-night-800/60' : dt === t ? 'bg-moon-400/5' : ''}`}
+                      aria-label={`${st.name} ${fmtMDW(dt)}`}>
+                      {sh ? (
+                        sh.kind === 'work' ? (
+                          <span className="w-full rounded-[7px] px-1.5 py-1 text-center" style={{ background: st.color + '1f', boxShadow: `inset 2.5px 0 0 ${st.color}` }}>
+                            <span className="block text-[10px] font-bold tnum" style={{ color: st.color }}>{sh.start}-{sh.end}</span>
+                            {sh.note && <span className="block text-[8.5px] text-night-200 truncate">{sh.note}</span>}
+                          </span>
+                        ) : (
+                          <span className={`text-[10px] font-bold ${sh.kind === 'wish_off' ? 'text-[#8fa3f0]' : 'text-night-300'}`}>{SHIFT_KIND_LABEL[sh.kind]}</span>
+                        )
+                      ) : (
+                        <span className="text-[12px] text-night-400">{closed ? '−' : '+'}</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <p className="text-[9.5px] text-night-300 mt-2">コマをクリックしてわりあて。営業時間・定休日・最低人数は「設定」から変更できます。</p>
+
+      <ShiftEditModal target={edit} onClose={() => setEdit(null)} />
+      <Modal open={confirmClear} onClose={() => setConfirmClear(false)}>
+        <div className="text-center py-2">
+          <IconTile name="trash" size={52} iconSize={24} tone="red" className="mx-auto" />
+          <h3 className="text-[15px] font-bold text-cream-50 mt-2">この週のシフトをすべて削除しますか？</h3>
+          <p className="text-[11px] text-night-200 mt-1 tnum">{fmtMD(dates[0])}〜{fmtMD(dates[6])} の全スタッフ分が対象です</p>
+          <div className="mt-4 flex gap-2">
+            <Btn kind="ghost" full onClick={() => setConfirmClear(false)}>やめる</Btn>
+            <Btn kind="moon" full onClick={clearWeek}>クリアする</Btn>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+/* 月カレンダー（人員の過不足を俯瞰） */
+function ShiftMonthView() {
+  const { admin } = useApp();
+  const [ym, setYm] = useState(todayStr().slice(0, 7));
+  const [openDay, setOpenDay] = useState(null);
+  const [edit, setEdit] = useState(null);
+  const dates = monthDatesOf(ym);
+  const lead = (dowOf(dates[0]) + 6) % 7;
+  const t = todayStr();
+  const moveYm = (d) => { const [y, m] = ym.split('-').map(Number); const nd = new Date(y, m - 1 + d, 1); setYm(`${nd.getFullYear()}-${String(nd.getMonth() + 1).padStart(2, '0')}`); };
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-3">
+        <Btn small kind="ghost" onClick={() => moveYm(-1)} aria-label="前の月">←</Btn>
+        <p className="text-[14px] font-bold text-cream-50 tnum">{ym.replace('-', '年')}月</p>
+        <Btn small kind="ghost" onClick={() => moveYm(1)} aria-label="次の月">→</Btn>
+        <Btn small kind="ghost" onClick={() => setYm(t.slice(0, 7))}>今月</Btn>
+      </div>
+      <div className="card p-2.5">
+        <div className="grid grid-cols-7 mb-1">
+          {['月','火','水','木','金','土','日'].map((w, i) => <p key={w} className={`text-center text-[10px] font-bold ${i === 6 ? 'text-[#f0968c]' : i === 5 ? 'text-[#8fa3f0]' : 'text-night-300'}`}>{w}</p>)}
+        </div>
+        <div className="grid grid-cols-7 gap-1">
+          {Array.from({ length: lead }).map((_, i) => <div key={'x' + i} />)}
+          {dates.map(dt => {
+            const closed = isClosedDay(admin, dt);
+            const ws = workersOf(admin, dt);
+            const under = !closed && dt >= t && ws.length < ((admin.shopHours || {}).minStaff || 1);
+            return (
+              <button key={dt} onClick={() => setOpenDay(dt)}
+                className={`btn-press rounded-[8px] border p-1.5 min-h-[64px] text-left transition-colors hover:border-moon-400/40
+                  ${closed ? 'bg-night-800/70 border-night-600/40' : under ? 'border-[#df5346]/50 bg-[#df5346]/8' : 'border-night-500/40 bg-night-700/40'} ${dt === t ? 'ring-1 ring-moon-400/60' : ''}`}>
+                <p className={`text-[10px] font-bold tnum ${dowOf(dt) === 0 ? 'text-[#f0968c]' : dowOf(dt) === 6 ? 'text-[#8fa3f0]' : 'text-night-100'}`}>{Number(dt.slice(8))}</p>
+                {closed
+                  ? <p className="text-[8.5px] font-bold text-night-400 mt-1">定休</p>
+                  : (
+                    <div className="mt-1">
+                      <div className="flex flex-wrap gap-[3px]">
+                        {ws.slice(0, 4).map(w => { const st = staffById(admin, w.staffId); return st && <span key={w.id} className="w-2 h-2 rounded-full" style={{ background: st.color }} />; })}
+                      </div>
+                      <p className={`text-[8.5px] font-bold mt-0.5 ${under ? 'text-[#f0968c]' : 'text-night-300'}`}>{ws.length}名{under ? '・不足' : ''}</p>
+                    </div>
+                  )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <Modal open={!!openDay} onClose={() => setOpenDay(null)}>
+        {openDay && (
+          <div>
+            <p className="kicker">Day Shift</p>
+            <h3 className="text-[15px] font-bold text-cream-50 mt-0.5 mb-1">{fmtJP(openDay)}</h3>
+            {isClosedDay(admin, openDay) && <Badge tone="red">定休日</Badge>}
+            {dayWarningsOf(admin, openDay).map((w, i) => <p key={i} className="text-[10.5px] font-bold text-[#f0968c] mt-1">・{w.label}</p>)}
+            <div className="mt-3 flex flex-col gap-1.5">
+              {activeStaff(admin).map(st => {
+                const sh = dayShiftsOf(admin, openDay).find(x => x.staffId === st.id);
+                return (
+                  <button key={st.id} onClick={() => setEdit({ date: openDay, staffId: st.id })}
+                    className="btn-press card-deep px-3 py-2.5 flex items-center gap-2.5 text-left hover:border-moon-400/40 border border-transparent transition-colors">
+                    <StaffAvatar st={st} size={30} />
+                    <span className="flex-1 text-[12px] font-bold text-cream-50">{st.name}</span>
+                    <span className="text-[11px] font-bold tnum" style={{ color: sh && sh.kind === 'work' ? st.color : '#8b94ad' }}>
+                      {sh ? (sh.kind === 'work' ? `${sh.start}〜${sh.end}` : SHIFT_KIND_LABEL[sh.kind]) : '未設定'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </Modal>
+      <ShiftEditModal target={edit} onClose={() => setEdit(null)} />
+    </div>
+  );
+}
+
+/* スタッフ登録・編集 */
+function StaffFormModal({ target, onClose }) {
+  const { admin, update } = useApp();
+  const isNew = target === 'new';
+  const src = isNew ? null : (admin.staff || []).find(x => x.id === target);
+  const [f, setF] = useState(null);
+  const [confirmDel, setConfirmDel] = useState(false);
+  useEffect(() => {
+    if (!target) { setF(null); return; }
+    setF(src ? { ...src, skills: [...(src.skills || [])] }
+      : { name: '', kana: '', role: STAFF_ROLES[1], type: STAFF_TYPES[0], color: STAFF_COLORS[(admin.staff || []).length % STAFF_COLORS.length], hourly: 0, phone: '', skills: ['施術'], note: '', active: true });
+    setConfirmDel(false);
+  }, [target]);
+  if (!target || !f) return null;
+  const set = (k, v) => setF(x => ({ ...x, [k]: v }));
+  const inp = "w-full bg-night-600 border border-night-400/50 rounded-[9px] px-3 py-2 text-[13px] font-bold text-cream-50 outline-none focus:border-moon-400";
+  const save = () => {
+    if (!f.name.trim()) { toast('お名前を入力してください', 'err'); return; }
+    update(a => {
+      a.staff = a.staff || [];
+      if (isNew) a.staff.push({ ...f, id: uid(), name: f.name.trim(), createdAt: todayStr() });
+      else { const i = a.staff.findIndex(x => x.id === f.id); if (i >= 0) a.staff[i] = { ...f, name: f.name.trim() }; }
+    });
+    toast(isNew ? `${f.name.trim()}さんを登録しました` : '保存しました');
+    onClose();
+  };
+  const remove = () => {
+    update(a => {
+      a.staff = (a.staff || []).filter(x => x.id !== f.id);
+      Object.keys(a.shifts || {}).forEach(dt => { a.shifts[dt] = a.shifts[dt].filter(x => x.staffId !== f.id); if (!a.shifts[dt].length) delete a.shifts[dt]; });
+    });
+    toast('スタッフを削除しました');
+    onClose();
+  };
+  return (
+    <Modal open onClose={onClose}>
+      <p className="kicker">{isNew ? 'New Staff' : 'Edit Staff'}</p>
+      <h3 className="text-[16px] font-bold text-cream-50 mt-0.5 mb-3">{isNew ? 'スタッフを登録' : 'スタッフ情報を編集'}</h3>
+      <div className="flex flex-col gap-2.5">
+        <div className="grid grid-cols-2 gap-2">
+          <input value={f.name} onChange={e => set('name', e.target.value)} placeholder="お名前" className={inp} />
+          <input value={f.kana} onChange={e => set('kana', e.target.value)} placeholder="かな" className={inp} />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <select value={f.role} onChange={e => set('role', e.target.value)} className={inp}>{STAFF_ROLES.map(r => <option key={r}>{r}</option>)}</select>
+          <select value={f.type} onChange={e => set('type', e.target.value)} className={inp}>{STAFF_TYPES.map(r => <option key={r}>{r}</option>)}</select>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <input value={f.phone} onChange={e => set('phone', e.target.value)} placeholder="電話番号" inputMode="tel" className={inp} />
+          <label className="flex items-center gap-2">
+            <span className="text-[10.5px] font-bold text-night-200 shrink-0">時給</span>
+            <input type="number" value={f.hourly || ''} onChange={e => set('hourly', Number(e.target.value) || 0)} placeholder="0=月給" className={inp + ' tnum'} />
+          </label>
+        </div>
+        <div>
+          <p className="text-[10.5px] font-bold text-night-200 mb-1.5">カラー（シフト表で使われます）</p>
+          <div className="flex gap-1.5 flex-wrap">
+            {STAFF_COLORS.map(c => (
+              <button key={c} onClick={() => set('color', c)} aria-label={`カラー${c}`}
+                className={`btn-press w-8 h-8 rounded-full border-2 ${f.color === c ? 'border-cream-50' : 'border-transparent'}`} style={{ background: c }} />
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="text-[10.5px] font-bold text-night-200 mb-1.5">できること</p>
+          <div className="flex gap-1.5 flex-wrap">
+            {STAFF_SKILLS.map(sk => (
+              <Chip key={sk} active={f.skills.includes(sk)} onClick={() => set('skills', f.skills.includes(sk) ? f.skills.filter(x => x !== sk) : [...f.skills, sk])}>{sk}</Chip>
+            ))}
+          </div>
+        </div>
+        <textarea value={f.note} onChange={e => set('note', e.target.value)} rows={2} placeholder="メモ（勤務条件・得意分野など）" className={inp} />
+        {!isNew && (
+          <label className="flex items-center gap-2 text-[12px] font-bold text-cream-50">
+            <input type="checkbox" checked={f.active} onChange={e => set('active', e.target.checked)} className="w-4 h-4 accent-[#eec25a]" />
+            在籍中（オフにするとシフト表に表示されません）
+          </label>
+        )}
+      </div>
+      <div className="mt-4 flex gap-2">
+        {!isNew && <Btn kind="ghost" onClick={() => setConfirmDel(true)}><Icon name="trash" size={13} /></Btn>}
+        <Btn kind="ghost" full onClick={onClose}>やめる</Btn>
+        <Btn kind="moon" full onClick={save}>{isNew ? '登録する' : '保存する'}</Btn>
+      </div>
+      <Modal open={confirmDel} onClose={() => setConfirmDel(false)}>
+        <div className="text-center py-2">
+          <IconTile name="trash" size={52} iconSize={24} tone="red" className="mx-auto" />
+          <h3 className="text-[15px] font-bold text-cream-50 mt-2">{f.name}さんを削除しますか？</h3>
+          <p className="text-[11px] text-night-200 mt-1">登録済みのシフトもすべて削除されます。退職の場合は「在籍中」をオフにする方法もあります。</p>
+          <div className="mt-4 flex gap-2">
+            <Btn kind="ghost" full onClick={() => setConfirmDel(false)}>やめる</Btn>
+            <Btn kind="moon" full onClick={remove}>削除する</Btn>
+          </div>
+        </div>
+      </Modal>
+    </Modal>
+  );
+}
+
+function StaffListTab() {
+  const { admin } = useApp();
+  const [edit, setEdit] = useState(null);
+  const list = admin.staff || [];
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-[11px] text-night-200 font-bold">{list.filter(s => s.active).length}名在籍{list.some(s => !s.active) ? `・${list.filter(s => !s.active).length}名休止` : ''}</p>
+        <Btn small kind="moon" onClick={() => setEdit('new')}><Icon name="pencil" size={13} className="mr-1" />新規スタッフ登録</Btn>
+      </div>
+      <div className="flex flex-col gap-2">
+        {list.map(st => (
+          <button key={st.id} onClick={() => setEdit(st.id)} className={`btn-press card p-3.5 flex items-center gap-3 text-left ${st.active ? '' : 'opacity-50'}`}>
+            <StaffAvatar st={st} size={42} />
+            <span className="flex-1 min-w-0">
+              <span className="flex items-center gap-2 flex-wrap">
+                <span className="text-[13.5px] font-bold text-cream-50">{st.name}</span>
+                <span className="text-[10px] text-night-300 font-medium">{st.kana}</span>
+                <Badge tone="gold">{st.role}</Badge>
+                <Badge tone="blue">{st.type}</Badge>
+                {!st.active && <Badge tone="red">休止中</Badge>}
+              </span>
+              <span className="flex items-center gap-2 mt-1 flex-wrap">
+                {(st.skills || []).map(sk => <span key={sk} className="text-[9px] font-bold text-night-100 bg-night-500/60 rounded-full px-2 py-0.5">{sk}</span>)}
+                {st.hourly > 0 && <span className="text-[9.5px] font-bold text-night-200 tnum">時給 {yen(st.hourly)}</span>}
+                {st.phone && <span className="text-[9.5px] text-night-300 tnum">{st.phone}</span>}
+              </span>
+              {st.note && <span className="block text-[10px] text-night-200 mt-1 truncate">{st.note}</span>}
+            </span>
+            <Icon name="pencil" size={14} className="text-night-300 shrink-0" />
+          </button>
+        ))}
+      </div>
+      <StaffFormModal target={edit} onClose={() => setEdit(null)} />
+    </div>
+  );
+}
+
+/* 月間集計（勤務時間・概算人件費・CSV書き出し） */
+function ShiftStatsTab() {
+  const { admin } = useApp();
+  const [ym, setYm] = useState(todayStr().slice(0, 7));
+  const dates = monthDatesOf(ym);
+  const moveYm = (d) => { const [y, m] = ym.split('-').map(Number); const nd = new Date(y, m - 1 + d, 1); setYm(`${nd.getFullYear()}-${String(nd.getMonth() + 1).padStart(2, '0')}`); };
+  const rows = activeStaff(admin).map(st => {
+    let days = 0, hours = 0;
+    dates.forEach(dt => {
+      const sh = dayShiftsOf(admin, dt).find(x => x.staffId === st.id && x.kind === 'work');
+      if (sh) { days += 1; hours += shiftHours(sh); }
+    });
+    return { st, days, hours, cost: st.hourly > 0 ? Math.round(hours * st.hourly) : null };
+  });
+  const totalCost = rows.reduce((a, r) => a + (r.cost || 0), 0);
+  const overWeeks = [];
+  activeStaff(admin).forEach(st => {
+    if (st.type === '正社員') return;
+    let mon = mondayOf(dates[0]);
+    while (mon <= dates[dates.length - 1]) {
+      const h = weekHoursOf(admin, st.id, mon);
+      if (h > 30) overWeeks.push({ st, mon, h });
+      mon = addDays(mon, 7);
+    }
+  });
+  const exportCsv = () => {
+    const lines = [['日付', 'スタッフ', '区分', '開始', '終了', '時間'].join(',')];
+    dates.forEach(dt => dayShiftsOf(admin, dt).forEach(sh => {
+      const st = staffById(admin, sh.staffId);
+      if (!st) return;
+      lines.push([dt, st.name, SHIFT_KIND_LABEL[sh.kind], sh.start || '', sh.end || '', sh.kind === 'work' ? shiftHours(sh).toFixed(2) : ''].join(','));
+    }));
+    const blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `sleepy_shift_${ym}.csv`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    toast('シフトCSVを書き出しました');
+  };
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-3">
+        <Btn small kind="ghost" onClick={() => moveYm(-1)}>←</Btn>
+        <p className="text-[14px] font-bold text-cream-50 tnum">{ym.replace('-', '年')}月</p>
+        <Btn small kind="ghost" onClick={() => moveYm(1)}>→</Btn>
+        <span className="flex-1" />
+        <Btn small kind="ghost" onClick={exportCsv}><Icon name="download" size={12} className="mr-1" />CSV書き出し</Btn>
+      </div>
+      <div className="card overflow-x-auto">
+        <div style={{ minWidth: 520 }}>
+          <div className="grid border-b border-night-500/60 px-3 py-2 text-[10px] font-bold text-night-300" style={{ gridTemplateColumns: '1fr 90px 90px 120px' }}>
+            <span>スタッフ</span><span className="text-right">出勤日数</span><span className="text-right">勤務時間</span><span className="text-right">概算人件費</span>
+          </div>
+          {rows.map(({ st, days, hours, cost }) => (
+            <div key={st.id} className="grid items-center px-3 py-2.5 border-b border-night-500/30 last:border-b-0" style={{ gridTemplateColumns: '1fr 90px 90px 120px' }}>
+              <span className="flex items-center gap-2 min-w-0"><StaffAvatar st={st} size={28} /><span className="text-[12px] font-bold text-cream-50 truncate">{st.name}</span></span>
+              <span className="text-right text-[12.5px] font-bold text-cream-50 tnum">{days}日</span>
+              <span className="text-right text-[12.5px] font-bold text-cream-50 tnum">{hours.toFixed(1)}h</span>
+              <span className="text-right text-[12.5px] font-bold tnum" style={{ color: cost != null ? '#eec25a' : '#8b94ad' }}>{cost != null ? yen(cost) : '月給'}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="card p-3.5 mt-3 flex items-center justify-between">
+        <p className="text-[11.5px] font-bold text-night-100">時給スタッフの概算人件費 合計</p>
+        <p className="text-[16px] font-bold text-moon-300 tnum">{yen(totalCost)}</p>
+      </div>
+      {overWeeks.length > 0 && (
+        <div className="card p-3.5 mt-3" style={{ borderColor: 'rgba(223,83,70,.4)' }}>
+          <p className="text-[11px] font-bold text-[#f0968c] mb-1.5 flex items-center gap-1.5"><Icon name="bell" size={13} />週30時間超のアラート（パート・業務委託）</p>
+          {overWeeks.map((o, i) => <p key={i} className="text-[10.5px] text-night-100 tnum">・{o.st.name}：{fmtMD(o.mon)}週 {o.h.toFixed(1)}h</p>)}
+        </div>
+      )}
+      <p className="text-[9.5px] text-night-300 mt-2">概算人件費は「時給×勤務時間」の単純計算です（休憩・割増は未考慮）。</p>
+    </div>
+  );
+}
+
+function StaffShiftScreen() {
+  const [tab, setTab] = useState('week');
+  const TABS = [
+    { id: 'week', label: 'シフト表' }, { id: 'month', label: 'カレンダー' },
+    { id: 'staff', label: 'スタッフ' }, { id: 'stats', label: '集計' },
+  ];
+  return (
+    <div className="anim-slide-up">
+      <SectionTitle icon="calendar" en="Staff & Shift" title="シフト・スタッフ管理" sub="登録スタッフの週シフト・月俯瞰・勤務集計" />
+      <div className="flex gap-1.5 mb-3 overflow-x-auto pb-1">
+        {TABS.map(x => <Chip key={x.id} active={tab === x.id} onClick={() => setTab(x.id)}>{x.label}</Chip>)}
+      </div>
+      {tab === 'week' && <ShiftWeekView />}
+      {tab === 'month' && <ShiftMonthView />}
+      {tab === 'staff' && <StaffListTab />}
+      {tab === 'stats' && <ShiftStatsTab />}
+    </div>
+  );
+}
+
 /* ---- シェル ---- */
 const NAV = [
   { id:'dash', icon:'chart', label:'ダッシュボード' },
   { id:'customers', icon:'users', label:'顧客' },
+  { id:'staff', icon:'calendar', label:'シフト' },
   { id:'sales', icon:'yen', label:'売上' },
   { id:'settings', icon:'gear', label:'設定' },
 ];
@@ -1909,6 +2614,7 @@ function App() {
   else if (route.name === 'customers') screen = <Customers />;
   else if (route.name === 'customer') screen = <CustomerDetail id={route.id} />;
   else if (route.name === 'capture') screen = <PostureCaptureScreen id={route.id} />;
+  else if (route.name === 'staff') screen = <StaffShiftScreen />;
   else if (route.name === 'sales') screen = <Sales />;
   else if (route.name === 'settings') screen = <AdminSettings />;
 
@@ -1929,7 +2635,7 @@ function App() {
           <nav className="mt-6 flex flex-col gap-1">
             {NAV.map(n => (
               <button key={n.id} onClick={() => nav(n.id)}
-                className={`btn-press flex items-center gap-2.5 px-3 py-2.5 rounded-[9px] text-[12.5px] font-bold text-left ${activeNav === n.id ? 'bg-moon-400/15 text-moon-300 border border-moon-400/30' : 'text-night-100 hover:bg-night-600/60'}`}>
+                className={`btn-press flex items-center gap-2.5 px-3 py-2.5 rounded-[9px] text-[12.5px] font-bold text-left transition-colors duration-150 ${activeNav === n.id ? 'bg-moon-400/15 text-moon-300 border border-moon-400/30' : 'text-night-100 border border-transparent hover:bg-night-600/60'}`}>
                 <Icon name={n.icon} size={16} />{n.label}
               </button>
             ))}
@@ -1948,12 +2654,12 @@ function App() {
             <p className="flex-1 text-[13px] font-bold text-cream-50">SLEEPY 管理コンソール</p>
             <button onClick={() => setLocked(true)} className="btn-press text-cream-100" aria-label="ロック"><Icon name="lock" size={16} /></button>
           </div>
-          <div className="p-4 md:p-6 max-w-5xl pb-24 md:pb-8">{screen}</div>
+          <div key={route.name + ':' + (route.id || '')} className="anim-screen p-4 md:p-6 max-w-5xl pb-24 md:pb-8">{screen}</div>
         </main>
       </div>
 
       {/* モバイル下部ナビ */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 px-3 pb-3">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 px-3" style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}>
         <div className="bg-night-800/95 border border-night-500/60 rounded-[10px] flex justify-around px-1 py-2" style={{ backdropFilter:'blur(12px)' }}>
           {NAV.map(n => (
             <button key={n.id} onClick={() => nav(n.id)} className="btn-press flex flex-col items-center gap-0.5 px-3 py-1">
