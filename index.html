@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0d1424">
+<meta name="theme-color" content="#0d1424">
 <title>SLEEPY | 睡眠整体サロン 公式アプリ</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='48' fill='%230d1424'/%3E%3Cpath d='M63 20a34 34 0 1 0 17 44A28 28 0 0 1 63 20z' fill='%23f6d97e'/%3E%3C/svg%3E">
 
@@ -104,14 +105,34 @@ tailwind.config = {
   .star { position:absolute; border-radius:9999px; background:#f9e6a8; animation: twinkle 3s ease-in-out infinite; }
 
   /* トースト */
-  #toast-root { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 9999; display:flex; flex-direction:column; gap:8px; pointer-events:none; width:min(92vw, 400px); }
-  .toast { pointer-events:auto; padding:11px 16px; border-radius:14px; color:#0d1424; font-size:13px; font-weight:700; box-shadow:0 10px 30px rgba(0,0,0,.45); animation: pop-in .3s cubic-bezier(.2,1.4,.4,1); display:flex; align-items:center; gap:8px; font-family:"Zen Maru Gothic","Noto Sans JP",sans-serif; }
+  #toast-root { position: fixed; top: max(14px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 9999; display:flex; flex-direction:column; align-items:center; gap:8px; pointer-events:none; width:min(92vw, 400px); }
+  .toast { pointer-events:auto; width:fit-content; max-width:100%; padding:9px 16px 9px 12px; border-radius:999px; color:#0d1424; font-size:12.5px; font-weight:700; box-shadow:0 10px 30px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.35); animation: toast-in .34s cubic-bezier(.2,1.4,.4,1); display:flex; align-items:center; gap:7px; font-family:"Zen Maru Gothic","Noto Sans JP",sans-serif; }
+  .toast svg { flex-shrink:0; }
+  @keyframes toast-in { 0% { opacity:0; transform:translateY(-10px) scale(.92);} 100% { opacity:1; transform:translateY(0) scale(1);} }
   .toast-info { background:#faf3e3; }
   .toast-xp { background:linear-gradient(105deg,#f6d97e,#f3e7c9); }
   .toast-err { background:#f5b0a0; }
 
   .no-scrollbar::-webkit-scrollbar { display:none; }
   .no-scrollbar { -ms-overflow-style:none; scrollbar-width:none; }
+
+  /* ---- UXポリッシュ (v8.1) ---- */
+  html { -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; }
+  * { -webkit-tap-highlight-color: transparent; }
+  ::selection { background:rgba(238,194,90,.35); color:#fdfbf5; }
+  :focus-visible { outline:2px solid rgba(238,194,90,.85); outline-offset:2px; border-radius:6px; }
+  :focus:not(:focus-visible) { outline:none; }
+  h1, h2, h3, .brand-serif { font-feature-settings:"palt"; letter-spacing:.01em; }
+  .tnum { font-variant-numeric: tabular-nums; }
+  .anim-screen { animation: screen-in .24s ease-out both; }
+  @keyframes screen-in { 0% { opacity:0; transform:translateY(7px);} 100% { opacity:1; transform:translateY(0);} }
+  .scroll-fade { -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 14px,#000 calc(100% - 24px),transparent 100%); mask-image:linear-gradient(90deg,transparent 0,#000 14px,#000 calc(100% - 24px),transparent 100%); }
+  .sheen { position:relative; overflow:hidden; }
+  .sheen::after { content:''; position:absolute; inset:-40% -20%; background:linear-gradient(115deg,transparent 44%,rgba(255,255,255,.065) 50%,transparent 56%); transform:translateX(-130%); animation: sheen-sweep 6.5s ease-in-out 1.2s infinite; pointer-events:none; }
+  @keyframes sheen-sweep { 0%,55% { transform:translateX(-130%);} 85%,100% { transform:translateX(130%);} }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; scroll-behavior:auto !important; }
+  }
 
   .card { background:#212c48; border:1px solid rgba(199,206,222,.13); border-radius:13px; }
   .card-deep { background:#1a2440; border:1px solid rgba(199,206,222,.10); border-radius:11px; }
@@ -188,9 +209,15 @@ function toast(msg, type) {
   const root = document.getElementById('toast-root');
   const el = document.createElement('div');
   el.className = 'toast ' + (type === 'xp' ? 'toast-xp' : type === 'err' ? 'toast-err' : 'toast-info');
-  el.textContent = msg;
+  const ic = type === 'xp'
+    ? '<path d="m12 3.4 2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 16.8l-5.2 2.8 1-5.9-4.3-4.1 5.9-.8z"/>'
+    : type === 'err'
+      ? '<circle cx="12" cy="12" r="8.6"/><path d="M12 7.6v5.2M12 15.9v.4"/>'
+      : '<path d="m4.5 12.8 4.6 4.6L19.5 6.6"/>';
+  el.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0d1424" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">' + ic + '</svg><span></span>';
+  el.lastChild.textContent = msg;
   root.appendChild(el);
-  setTimeout(() => { el.style.transition = 'opacity .3s'; el.style.opacity = '0'; setTimeout(() => el.remove(), 320); }, 2600);
+  setTimeout(() => { el.style.transition = 'opacity .3s, transform .3s'; el.style.opacity = '0'; el.style.transform = 'translateY(-6px)'; setTimeout(() => el.remove(), 320); }, 2600);
 }
 
 /* ============================================================
@@ -3608,14 +3635,14 @@ function ShopScreen({ route }) {
       {recProducts.length > 0 && (
         <div className="px-4 mt-3">
           <SectionTitle icon="sparkle" en="For You" title="あなたへのおすすめ" sub="睡眠記録・姿勢分析にもとづく提案です" />
-          <div className="flex gap-2.5 overflow-x-auto no-scrollbar pb-1 -mx-4 px-4">
+          <div className="scroll-fade flex gap-2.5 overflow-x-auto no-scrollbar pb-1 -mx-4 px-4">
             {recProducts.map(({ id, label }) => {
               const p = PRODUCT[id];
               if (!p) return null;
               return (
                 <button key={id} onClick={() => nav('product', { id })} className="btn-press shrink-0 w-[210px] rounded-[14px] p-4 text-left border border-moon-400/30"
                   style={{ background: 'linear-gradient(135deg,#2b3a5e,#222e4c)' }}>
-                  <span className="text-[9.5px] font-bold text-night-900 bg-moon-400 rounded-full px-2 py-0.5">「{label}」のあなたに</span>
+                  <span className="inline-block max-w-full truncate align-top text-[9.5px] font-bold text-night-900 bg-moon-400 rounded-full px-2 py-0.5">「{label}」のあなたに</span>
                   <div className="flex items-center gap-2.5 mt-2.5">
                     <IconTile name={p.icon} size={44} tone="gold" />
                     <span>
@@ -3651,7 +3678,7 @@ function ShopScreen({ route }) {
       </div>
 
       {/* 商品カテゴリ（従来の分類はサブ導線として残す） */}
-      <div className="px-4 mt-4 flex gap-1.5 overflow-x-auto no-scrollbar">
+      <div className="scroll-fade px-4 mt-4 flex gap-1.5 overflow-x-auto no-scrollbar">
         {cats.map(c => <Chip key={c} active={!activeConcern && cat === c} onClick={() => { setCat(c); setConcern(null); }}>{c === 'all' ? 'すべて' : c}</Chip>)}
       </div>
 
@@ -3659,8 +3686,12 @@ function ShopScreen({ route }) {
         {shown.map(p => (
           <div key={p.id} className="card p-3 flex flex-col">
             <button onClick={() => nav('product', { id: p.id })} className="btn-press text-left flex-1">
-              <div className="h-[74px] rounded-[10px] bg-night-500/50 flex items-center justify-center text-cream-100/90"><Icon name={p.icon} size={30} strokeWidth={1.5} /></div>
-              <p className="text-[9.5px] font-bold text-moon-300 mt-2">{p.cat}{p.badge && <span className="ml-1.5 text-[8.5px] text-night-900 bg-moon-400 rounded-[5px] px-1.5 py-0.5 font-bold">{p.badge}</span>}</p>
+              <div className="relative h-[84px] rounded-[10px] flex items-center justify-center overflow-hidden"
+                style={{ background: 'radial-gradient(circle at 50% 30%, rgba(238,194,90,.15), transparent 68%), linear-gradient(160deg,#26334f,#1c2640)' }}>
+                <Icon name={p.icon} size={34} strokeWidth={1.4} className="text-moon-300" />
+                {p.badge && <span className="absolute top-1.5 right-1.5 text-[8.5px] text-night-900 bg-moon-400 rounded-[5px] px-1.5 py-0.5 font-bold">{p.badge}</span>}
+              </div>
+              <p className="text-[9.5px] font-bold text-moon-300 mt-2">{p.cat}</p>
               <p className="text-[12px] font-bold text-cream-50 leading-snug mt-0.5">{p.name}</p>
               <p className="text-[13px] font-bold text-cream-50 mt-1">{yen(p.price)}</p>
             </button>
@@ -3947,7 +3978,7 @@ function MemberScreen() {
           </div>
         )}
         {/* 会員証カード */}
-        <NightSky dense className="rounded-[14px] border border-moon-400/25 shadow-xl shadow-black/30">
+        <NightSky dense className="sheen rounded-[14px] border border-moon-400/25 shadow-xl shadow-black/30">
           <div className="p-5">
             <div className="flex items-center justify-between">
               <div>
@@ -5932,7 +5963,7 @@ function TabBar({ current, onTab }) {
     { id: 'shop', icon: 'bag', label: 'ショップ' },
   ];
   return (
-    <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] z-50 px-3 pb-3">
+    <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] z-50 px-3" style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}>
       <div className="bg-night-800/95 border border-night-500/60 rounded-[14px] shadow-2xl shadow-black/50 flex items-end justify-around px-1 pt-1.5 pb-2" style={{ backdropFilter: 'blur(12px)' }}>
         {tabs.map(t => {
           const active = current === t.id;
@@ -5945,9 +5976,11 @@ function TabBar({ current, onTab }) {
             </button>
           );
           return (
-            <button key={t.id} onClick={() => onTab(t.id)} className="btn-press flex flex-col items-center gap-0.5 px-2.5 py-1" aria-label={t.label}>
-              <Icon name={t.icon} size={20} className={active ? 'text-moon-300' : 'text-night-300'} strokeWidth={1.8} />
-              <span className={`text-[9px] font-bold ${active ? 'text-moon-300' : 'text-night-300'}`}>{t.label}</span>
+            <button key={t.id} onClick={() => onTab(t.id)} className="btn-press flex flex-col items-center gap-0.5 px-1.5 py-1" aria-label={t.label}>
+              <span className={`px-3 py-[3px] rounded-full transition-colors duration-200 ${active ? 'bg-moon-400/15' : ''}`}>
+                <Icon name={t.icon} size={20} className={`transition-colors duration-200 ${active ? 'text-moon-300' : 'text-night-300'}`} strokeWidth={1.8} />
+              </span>
+              <span className={`text-[9px] font-bold transition-colors duration-200 ${active ? 'text-moon-300' : 'text-night-300'}`}>{t.label}</span>
             </button>
           );
         })}
@@ -6066,7 +6099,7 @@ function App() {
     <Ctx.Provider value={{ state, update, replaceAll, nav, back, route }}>
       <div className="mx-auto max-w-[430px] min-h-screen relative shadow-2xl shadow-black/60"
         style={{ background: 'linear-gradient(180deg,#0d1424 0%,#121a2e 40%,#0d1424 100%)', paddingBottom: isTab ? 96 : 24, zoom: state.largeText ? 1.1 : 1 }}>
-        <div key={stack.length + ':' + route.name}>{screen}</div>
+        <div key={stack.length + ':' + route.name} className="anim-screen">{screen}</div>
         {isTab && <TabBar current={route.name} onTab={t => nav(t)} />}
         <LevelUpModal info={levelUp} onClose={() => setLevelUp(null)} />
       </div>

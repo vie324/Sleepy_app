@@ -2,7 +2,8 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d1424">
 <meta name="theme-color" content="#0d1424">
 <title>SLEEPY 管理コンソール | スタッフ用</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='48' fill='%230d1424'/%3E%3Cpath d='M63 20a34 34 0 1 0 17 44A28 28 0 0 1 63 20z' fill='%2325a08c'/%3E%3C/svg%3E">
@@ -57,9 +58,32 @@ tailwind.config = {
   .card-deep { background:#1a2440; border:1px solid rgba(199,206,222,.10); border-radius:10px; }
   .btn-press { transition: transform .12s ease; }
   .btn-press:active { transform: scale(.96); }
-  #toast-root { position:fixed; top:14px; left:50%; transform:translateX(-50%); z-index:9999; display:flex; flex-direction:column; gap:8px; pointer-events:none; width:min(92vw,420px); }
-  .toast { pointer-events:auto; padding:11px 16px; border-radius:14px; color:#0d1424; font-size:13px; font-weight:700; box-shadow:0 10px 30px rgba(0,0,0,.45); animation:pop-in .3s cubic-bezier(.2,1.4,.4,1); background:#faf3e3; }
+  #toast-root { position:fixed; top:max(14px, env(safe-area-inset-top)); left:50%; transform:translateX(-50%); z-index:9999; display:flex; flex-direction:column; align-items:center; gap:8px; pointer-events:none; width:min(92vw,420px); }
+  .toast { pointer-events:auto; width:fit-content; max-width:100%; padding:9px 16px 9px 12px; border-radius:999px; color:#0d1424; font-size:12.5px; font-weight:700; box-shadow:0 10px 30px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.35); animation:toast-in .34s cubic-bezier(.2,1.4,.4,1); background:#faf3e3; display:flex; align-items:center; gap:7px; }
+  .toast svg { flex-shrink:0; }
+  @keyframes toast-in { 0% { opacity:0; transform:translateY(-10px) scale(.92);} 100% { opacity:1; transform:translateY(0) scale(1);} }
   .toast-err { background:#f5b0a0; }
+
+  /* ---- UXポリッシュ (v8.1) ---- */
+  html { -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; }
+  * { -webkit-tap-highlight-color: transparent; }
+  ::selection { background:rgba(238,194,90,.35); color:#fdfbf5; }
+  :focus-visible { outline:2px solid rgba(238,194,90,.85); outline-offset:2px; border-radius:6px; }
+  :focus:not(:focus-visible) { outline:none; }
+  h1, h2, h3 { font-feature-settings:"palt"; letter-spacing:.01em; }
+  .tnum { font-variant-numeric: tabular-nums; }
+  .anim-screen { animation: screen-in .22s ease-out both; }
+  @keyframes screen-in { 0% { opacity:0; transform:translateY(6px);} 100% { opacity:1; transform:translateY(0);} }
+  button.card { transition: border-color .16s ease, background-color .16s ease; }
+  button.card:hover { border-color: rgba(238,194,90,.30); }
+  @media (min-width: 768px) {
+    ::-webkit-scrollbar { width:10px; height:10px; }
+    ::-webkit-scrollbar-thumb { background:#2c3a5c; border-radius:8px; border:2px solid #0d1424; }
+    ::-webkit-scrollbar-track { background:transparent; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; scroll-behavior:auto !important; }
+  }
   .viz-tip { position:absolute; z-index:20; background:#0d1424; border:1px solid rgba(199,206,222,.18); color:#eef1f8; font-size:11px; font-weight:700; padding:6px 10px; border-radius:10px; pointer-events:none; white-space:nowrap; transform:translate(-50%,-110%); }
   .viz-tip .tip-sub { color:#8b96b8; font-weight:500; }
 </style>
@@ -201,9 +225,13 @@ function toast(msg, type) {
   const root = document.getElementById('toast-root');
   const el = document.createElement('div');
   el.className = 'toast' + (type === 'err' ? ' toast-err' : '');
-  el.textContent = msg;
+  const ic = type === 'err'
+    ? '<circle cx="12" cy="12" r="8.6"/><path d="M12 7.6v5.2M12 15.9v.4"/>'
+    : '<path d="m4.5 12.8 4.6 4.6L19.5 6.6"/>';
+  el.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0d1424" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">' + ic + '</svg><span></span>';
+  el.lastChild.textContent = msg;
   root.appendChild(el);
-  setTimeout(() => { el.style.transition='opacity .3s'; el.style.opacity='0'; setTimeout(()=>el.remove(), 320); }, 2600);
+  setTimeout(() => { el.style.transition='opacity .3s, transform .3s'; el.style.opacity='0'; el.style.transform='translateY(-6px)'; setTimeout(()=>el.remove(), 320); }, 2600);
 }
 
 // 行動チェック（スコア計算・表示ラベル用の要約版）
@@ -601,14 +629,14 @@ function Modal({ open, onClose, children, wide }) {
   );
 }
 function EmptyState({ icon = 'zzz', text, sub }) {
-  return <div className="py-7 text-center"><div className="mb-2.5 flex justify-center"><Icon name={icon} size={28} className="text-night-300" strokeWidth={1.4} /></div>
+  return <div className="py-5 text-center"><div className="mb-2.5 flex justify-center"><Icon name={icon} size={28} className="text-night-300" strokeWidth={1.4} /></div>
     <p className="text-[12.5px] font-bold text-night-100">{text}</p>{sub && <p className="text-[10.5px] text-night-200 mt-1">{sub}</p>}</div>;
 }
-function StatTile({ label, value, unit, sub, accent, onClick }) {
+function StatTile({ label, value, unit, sub, accent, onClick, icon }) {
   return (
     <button onClick={onClick} className={`card p-3.5 text-left w-full ${onClick ? 'btn-press' : 'cursor-default'}`}>
-      <p className="text-[10px] font-bold text-night-200">{label}</p>
-      <p className="text-[24px] leading-tight font-bold mt-1" style={{ color: accent || '#eef1f8' }}>{value}<span className="text-[11px] font-bold text-night-200 ml-0.5">{unit}</span></p>
+      <p className="text-[10px] font-bold text-night-200 flex items-center justify-between gap-1">{label}{icon && <Icon name={icon} size={13} className="text-moon-300/70 shrink-0" />}</p>
+      <p className="tnum text-[24px] leading-tight font-bold mt-1" style={{ color: accent || '#eef1f8' }}>{value}<span className="text-[11px] font-bold text-night-200 ml-0.5">{unit}</span></p>
       {sub && <p className="text-[9.5px] text-night-300 mt-0.5">{sub}</p>}
     </button>
   );
@@ -819,12 +847,12 @@ function Dashboard() {
     <div className="anim-slide-up">
       <SectionTitle icon="chart" en="Dashboard" title="ダッシュボード" sub={fmtJP(t)} />
       <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5">
-        <StatTile label="顧客数" value={cs.length} unit="名" onClick={() => nav('customers')} />
-        <StatTile label="本日の来店" value={todayVisits.length} unit="件" accent={todayVisits.length ? '#f6d97e' : undefined} />
-        <StatTile label="直近30日の来店" value={monthVisits} unit="件" />
-        <StatTile label="直近30日の物販売上" value={monthSales.toLocaleString()} unit="円" onClick={() => nav('sales')} />
-        <StatTile label="サブスク月額(MRR)" value={mrr.toLocaleString()} unit="円" onClick={() => nav('sales')} />
-        <StatTile label="要フォロー" value={follows.length} unit="名" accent={follows.length ? '#f0968c' : '#4cc2ae'} />
+        <StatTile icon="users" label="顧客数" value={cs.length} unit="名" onClick={() => nav('customers')} />
+        <StatTile icon="building" label="本日の来店" value={todayVisits.length} unit="件" accent={todayVisits.length ? '#f6d97e' : undefined} />
+        <StatTile icon="calendar" label="直近30日の来店" value={monthVisits} unit="件" />
+        <StatTile icon="bag" label="直近30日の物販売上" value={monthSales.toLocaleString()} unit="円" onClick={() => nav('sales')} />
+        <StatTile icon="card" label="サブスク月額(MRR)" value={mrr.toLocaleString()} unit="円" onClick={() => nav('sales')} />
+        <StatTile icon="bell" label="要フォロー" value={follows.length} unit="名" accent={follows.length ? '#f0968c' : '#4cc2ae'} />
       </div>
 
       {/* カウンセリング受信箱 */}
@@ -1929,7 +1957,7 @@ function App() {
           <nav className="mt-6 flex flex-col gap-1">
             {NAV.map(n => (
               <button key={n.id} onClick={() => nav(n.id)}
-                className={`btn-press flex items-center gap-2.5 px-3 py-2.5 rounded-[9px] text-[12.5px] font-bold text-left ${activeNav === n.id ? 'bg-moon-400/15 text-moon-300 border border-moon-400/30' : 'text-night-100 hover:bg-night-600/60'}`}>
+                className={`btn-press flex items-center gap-2.5 px-3 py-2.5 rounded-[9px] text-[12.5px] font-bold text-left transition-colors duration-150 ${activeNav === n.id ? 'bg-moon-400/15 text-moon-300 border border-moon-400/30' : 'text-night-100 border border-transparent hover:bg-night-600/60'}`}>
                 <Icon name={n.icon} size={16} />{n.label}
               </button>
             ))}
@@ -1948,12 +1976,12 @@ function App() {
             <p className="flex-1 text-[13px] font-bold text-cream-50">SLEEPY 管理コンソール</p>
             <button onClick={() => setLocked(true)} className="btn-press text-cream-100" aria-label="ロック"><Icon name="lock" size={16} /></button>
           </div>
-          <div className="p-4 md:p-6 max-w-5xl pb-24 md:pb-8">{screen}</div>
+          <div key={route.name + ':' + (route.id || '')} className="anim-screen p-4 md:p-6 max-w-5xl pb-24 md:pb-8">{screen}</div>
         </main>
       </div>
 
       {/* モバイル下部ナビ */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 px-3 pb-3">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 px-3" style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}>
         <div className="bg-night-800/95 border border-night-500/60 rounded-[10px] flex justify-around px-1 py-2" style={{ backdropFilter:'blur(12px)' }}>
           {NAV.map(n => (
             <button key={n.id} onClick={() => nav(n.id)} className="btn-press flex flex-col items-center gap-0.5 px-3 py-1">
